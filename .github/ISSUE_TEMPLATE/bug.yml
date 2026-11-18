@@ -1,0 +1,25 @@
+name: Bug
+description: Something Relay does is wrong, and you can say how to see it.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Describe the real result. Do not paste API keys, chat transcripts you want kept private, or VM disk paths from outside Relay.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps
+      description: Include the Relay version, Windows or Linux, and whether a credential was stored. Do not include the credential.
+    validations:
+      required: true

@@ -1,0 +1,19 @@
+name: Integration
+description: Ask for a provider only if you can point at its official interface.
+title: "[integration] "
+labels: ["integration"]
+body:
+  - type: input
+    id: docs
+    attributes:
+      label: Official documentation URL
+      description: Relay does not add an integration from a guess, a scraped website, or an unofficial client.
+    validations:
+      required: true
+  - type: textarea
+    id: surface
+    attributes:
+      label: What the documented interface can and cannot do
+      description: Say whether it is a chat API, a local CLI, a coding agent, or something else. Say if a consumer subscription includes API access.
+    validations:
+      required: true

@@ -1,0 +1,23 @@
+appId: app.relay.desktop
+productName: Relay
+copyright: Copyright © 2026 Manjeet Singh
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Relay-Setup-${version}.${ext}
+portable:
+  artifactName: Relay-${version}-win-portable.${ext}
