@@ -19,6 +19,7 @@ import { attachVncProxy } from "./vnc.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
 import { openLoginPage } from "../browser/cdp.ts";
 import { siteById } from "../browser/sites.ts";
+import { beginProvision as defaultBeginProvision } from "../vm/provision-lock.ts";
 
 export interface ServerHandle {
   port: number;
@@ -35,7 +36,9 @@ export async function startServer(options: {
   staticDir?: string;
   runtime?: AdapterRuntime;
   version?: string;
+  beginProvision?: () => () => void;
 }): Promise<ServerHandle> {
+  const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
   const store = await Store.open(options.dataDir);
   const listeners = new Set<ServerResponse>();
@@ -353,20 +356,23 @@ export async function startServer(options: {
     }
     if (method === "POST" && url.pathname === "/api/vm/preflight") return send(response, 200, await preflight(options.dataDir));
     if (method === "POST" && url.pathname === "/api/vm/provision") {
+      const release = acquireProvision();
+      try {
       const body = await json(request);
-      if (vm.isProvisioning()) {
-        throw new RelayError("busy", "A provision is already running. Its log is on this page. Nothing else was started.", 409);
-      }
       const record = await vm.provision({
         record: store.data.vm,
         allowSoftwareEmulation: body.allowSoftwareEmulation === true,
         acknowledgeLowMemory: body.acknowledgeLowMemory === true,
+        holdsLock: true,
       });
       await store.update((data) => {
         data.vm = record;
       });
       notify();
       return send(response, 201, await vmState());
+      } finally {
+        release();
+      }
     }
     if (method === "POST" && url.pathname === "/api/vm/start") {
       if (!store.data.vm) throw new RelayError("vm_missing", "Provision a VM first.");

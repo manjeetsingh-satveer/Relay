@@ -10,18 +10,17 @@ import { RelayError } from "../core/errors.ts";
 import { downloadVerified, isInside, ubuntuImageSpec } from "./checksum.ts";
 import { buildQemuArgs, chooseAccel, findQemu, findQemuImg, preflight, type QemuPlan } from "./qemu.ts";
 import { buildCidataIso } from "./seed-iso.ts";
+import { beginProvision, provisionInProgress } from "./provision-lock.ts";
 
 const run = promisify(execFile);
 
 export type ExecFileImpl = (file: string, args: string[]) => Promise<void>;
 
 export class VmManager {
-  private busy = false;
-
   constructor(private readonly root: string) {}
 
   isProvisioning(): boolean {
-    return this.busy;
+    return provisionInProgress();
   }
 
   directory(): string {
@@ -40,11 +39,9 @@ export class VmManager {
     execFileImpl?: ExecFileImpl;
     onProgress?: (message: string) => void;
     imageSpec?: { fileName: string; imageUrl: string; checksumUrl: string };
+    holdsLock?: boolean;
   }): Promise<VmRecord> {
-    if (this.busy) {
-      throw new RelayError("busy", "A provision is already running. Wait for it to finish. The image on disk is kept.", 409);
-    }
-    this.busy = true;
+    const release = input.holdsLock ? null : beginProvision();
     const dir = this.directory();
     const log = (message: string) => this.note(dir, message, input.onProgress);
     try {
@@ -143,7 +140,7 @@ export class VmManager {
       if (error instanceof RelayError) throw error;
       throw new RelayError("provision", message);
     } finally {
-      this.busy = false;
+      release?.();
     }
   }
 

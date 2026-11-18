@@ -3,6 +3,7 @@ import path from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { FileEncryptedSecretStore } from "../core/secrets.ts";
 import { startServer } from "../server/app.ts";
+import { beginProvision } from "../vm/provision-lock.ts";
 
 const locked = app.requestSingleInstanceLock();
 if (!locked) app.quit();
@@ -26,6 +27,7 @@ app.whenReady().then(async () => {
     secretStore: secrets,
     staticDir,
     version: app.getVersion(),
+    beginProvision,
   });
   const window = new BrowserWindow({
     width: 1280,

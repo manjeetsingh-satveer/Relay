@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { stat, rename, unlink } from "node:fs/promises";
+import { copyFile, stat, rename, unlink } from "node:fs/promises";
 import { Transform, Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -28,6 +28,7 @@ export async function downloadVerified(input: {
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
+  tempPath?: (dest: string) => string;
 }): Promise<{ sha256: string; bytes: number; note: string; reused: boolean }> {
   const fetchImpl = input.fetchImpl ?? fetch;
   const noteProgress = input.onProgress ?? (() => undefined);
@@ -54,11 +55,11 @@ export async function downloadVerified(input: {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   noteProgress(`Downloading ${input.fileName}.`);
+  const partial = (input.tempPath ?? defaultTempPath)(input.dest);
   const imageResponse = await fetchImpl(input.imageUrl, { signal: input.signal });
   if (!imageResponse.ok || !imageResponse.body) {
     throw new Error(`Could not download the image (${imageResponse.status}). Nothing was kept.`);
   }
-  const partial = input.dest + ".partial";
   const hash = createHash("sha256");
   let bytes = 0;
   let reported = 0;
@@ -74,16 +75,18 @@ export async function downloadVerified(input: {
     },
   });
   const body = Readable.fromWeb(imageResponse.body as import("node:stream/web").ReadableStream);
-  await pipeline(body, hasher, createWriteStream(partial, { mode: 0o644 }));
+  try {
+    await pipeline(body, hasher, createWriteStream(partial, { mode: 0o644 }));
+  } catch (error) {
+    await unlink(partial).catch(() => undefined);
+    throw error;
+  }
   const actual = hash.digest("hex");
   if (actual !== expected) {
     await unlink(partial).catch(() => undefined);
     throw new Error(`SHA256 mismatch for ${input.fileName}. Expected ${expected}, got ${actual}. The partial file was deleted.`);
   }
-  await unlink(input.dest).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") throw error;
-  });
-  await rename(partial, input.dest);
+  await replaceFile(partial, input.dest);
   const info = await stat(input.dest);
   noteProgress(`Saved ${input.fileName} (${info.size} bytes). SHA256 matches.`);
   return {
@@ -92,6 +95,35 @@ export async function downloadVerified(input: {
     reused: false,
     note: `SHA256 matches the checksum file downloaded from ${input.checksumUrl}. The GPG signature of that checksum file was not checked.`,
   };
+}
+
+export function defaultTempPath(dest: string): string {
+  return `${dest}.${process.pid}.${randomBytes(4).toString("hex")}.partial`;
+}
+
+/** Publish a finished download. Windows reports ENOENT when rename meets an existing target, so fall back to copy. */
+export async function replaceFile(
+  partial: string,
+  dest: string,
+  renameImpl: (from: string, to: string) => Promise<void> = rename,
+): Promise<void> {
+  try {
+    await renameImpl(partial, dest);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST" && code !== "EPERM" && code !== "ENOENT") throw error;
+  }
+  try {
+    await stat(dest);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Could not move ${path.basename(partial)} into place because that temp file is gone. The existing image, if any, was left unchanged.`);
+    }
+    throw error;
+  }
+  await copyFile(partial, dest);
+  await unlink(partial).catch(() => undefined);
 }
 
 export function ubuntuImageSpec(): { fileName: string; imageUrl: string; checksumUrl: string } {

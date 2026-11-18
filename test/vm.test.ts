@@ -4,7 +4,7 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { checksumFor, downloadVerified } from "../src/vm/checksum.ts";
+import { checksumFor, downloadVerified, replaceFile } from "../src/vm/checksum.ts";
 import { buildQemuArgs, chooseAccel, qemuImgCandidates } from "../src/vm/qemu.ts";
 import { preflight } from "../src/vm/qemu.ts";
 import { VmManager } from "../src/vm/manager.ts";
@@ -34,6 +34,54 @@ describe("checksums", () => {
       }),
     ).rejects.toThrow(/mismatch/);
     await expect(stat(dest)).rejects.toThrow();
+    server.close();
+  });
+});
+
+describe("image replace", () => {
+  it("keeps the new bytes when rename reports ENOENT because the image already exists", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "relay-replace-"));
+    const dest = path.join(dir, "noble-server-cloudimg-amd64.img");
+    const partial = path.join(dir, "noble-server-cloudimg-amd64.img.1234.partial");
+    await writeFile(dest, "old-image");
+    await writeFile(partial, "verified-image");
+    await replaceFile(partial, dest, async () => {
+      const error = new Error(`ENOENT: no such file or directory, rename '${partial}' -> '${dest}'`) as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    });
+    expect(await readFile(dest, "utf8")).toBe("verified-image");
+    await expect(stat(partial)).rejects.toThrow();
+  });
+
+  it("gives concurrent downloads different temp files", async () => {
+    const image = Buffer.from("same-bytes");
+    const hash = createHash("sha256").update(image).digest("hex");
+    const server = createServer((request, response) => {
+      if (request.url?.endsWith("SHA256SUMS")) {
+        response.end(`${hash} *disk.img\n`);
+        return;
+      }
+      response.end(image);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const dir = await mkdtemp(path.join(tmpdir(), "relay-parallel-"));
+    const dest = path.join(dir, "disk.img");
+    const temps: string[] = [];
+    await Promise.all([0, 1].map(() => downloadVerified({
+      imageUrl: `http://127.0.0.1:${port}/disk.img`,
+      checksumUrl: `http://127.0.0.1:${port}/SHA256SUMS`,
+      fileName: "disk.img",
+      dest,
+      tempPath: (target) => {
+        const name = `${target}.${temps.length}.partial`;
+        temps.push(name);
+        return name;
+      },
+    })));
+    expect(new Set(temps).size).toBe(2);
+    expect(createHash("sha256").update(await readFile(dest)).digest("hex")).toBe(hash);
     server.close();
   });
 });
