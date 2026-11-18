@@ -4,9 +4,13 @@ Relay is one desktop chat that routes work to AI tools the user already has. Con
 
 ## Setup
 
+Repository: https://github.com/manjeetsingh-satveer/Relay
+
 Node.js 22 or newer.
 
 ```bash
+git clone https://github.com/manjeetsingh-satveer/Relay.git
+cd Relay
 npm ci
 npm test
 npm run dev
@@ -42,4 +46,4 @@ Grok Bot phone calls are unsupported. Do not wire an unofficial private port or 
 
 ## Good first issues
 
-See [docs/good-first-issues.md](docs/good-first-issues.md). The labels `good first issue` and `help wanted` have to be created in GitHub after the repository is published. This file does not pretend those labels already exist.
+See [docs/good-first-issues.md](docs/good-first-issues.md). File them at https://github.com/manjeetsingh-satveer/Relay/issues. The labels `good first issue` and `help wanted` still have to be created on that repository. This file does not pretend those labels already exist.

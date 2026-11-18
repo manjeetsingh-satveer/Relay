@@ -1,8 +1,16 @@
-# Publishing on GitHub
+# GitHub
 
-This tree is prepared for a public repository named `relay`. Creating that repository and turning on visibility still has to be done by the owner. This workspace is not logged into GitHub.
+The public repository is https://github.com/manjeetsingh-satveer/Relay
 
-Suggested repository name: `relay`
+Clone it with:
+
+```bash
+git clone https://github.com/manjeetsingh-satveer/Relay.git
+```
+
+Issues: https://github.com/manjeetsingh-satveer/Relay/issues
+
+Security reports: https://github.com/manjeetsingh-satveer/Relay/security/advisories/new
 
 Suggested description:
 
@@ -12,7 +20,7 @@ Suggested topics:
 
 `ai` `desktop` `electron` `openai` `anthropic` `gemini` `cursor` `qemu` `linux` `windows` `open-source`
 
-Do not add a star count, a download count, or a CI badge until the repository exists and the workflow has run. A badge URL for a repository that is not there yet is a broken image.
+Do not add a star count or a download count. Do not add a CI badge until the Actions workflow on this repository has completed once. A badge for a workflow that has never run is a broken image.
 
 Suggested first release name: `v0.1.0`
 
@@ -24,4 +32,4 @@ Release notes should say:
 - Grok Bot chat and Grok Bot phone calls are unsupported.
 - Drex is an optional routing model, not the chat model.
 
-Create the labels `bug`, `enhancement`, `integration`, `good first issue`, and `help wanted` after the repo exists. The issue templates request `bug`, `enhancement`, and `integration`.
+Create the labels `bug`, `enhancement`, `integration`, `good first issue`, and `help wanted` on the repository. The issue templates request `bug`, `enhancement`, and `integration`.

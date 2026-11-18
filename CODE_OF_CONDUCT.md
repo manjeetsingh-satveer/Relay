@@ -19,7 +19,7 @@ We want Relay to be a project people can file issues against and send patches to
 
 ## Enforcement
 
-Project maintainers can edit or reject issues, comments, and pull requests that break this file. If the repository is on GitHub, report a conduct problem to the maintainers through a private security advisory or the contact published on the repository, not in a public issue that names a private individual.
+Project maintainers can edit or reject issues, comments, and pull requests that break this file. Report a conduct problem through https://github.com/manjeetsingh-satveer/Relay/security/advisories/new, not in a public issue that names a private individual.
 
 ## Attribution
 

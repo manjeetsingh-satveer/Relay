@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security report
-    url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
-    about: Use a private advisory once this repository is on GitHub. Do not file secrets in a public issue.
+    url: https://github.com/manjeetsingh-satveer/Relay/security/advisories/new
+    about: Open a private security advisory. Do not file secrets in a public issue.

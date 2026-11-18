@@ -4,9 +4,9 @@ Relay stores API keys and runs commands and a virtual machine on the machine whe
 
 ## Reporting
 
-Once this project is on GitHub, use a private security advisory. Do not open a public issue that includes a key, a session token, a guest password, or a private chat.
+Use a private advisory: https://github.com/manjeetsingh-satveer/Relay/security/advisories/new
 
-Until a public repository exists, send the report to the maintainer out of band. Do not mail a live API key as the example.
+Do not open a public issue that includes a key, a session token, a guest password, or a private chat. Do not mail a live API key as the example.
 
 ## What to expect
 

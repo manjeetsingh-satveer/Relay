@@ -31,9 +31,13 @@ The SVG is a placeholder for a future capture of a booted guest or a finished ag
 
 ## Quick start
 
+Repository: https://github.com/manjeetsingh-satveer/Relay
+
 Requires Node.js 22 or newer.
 
 ```bash
+git clone https://github.com/manjeetsingh-satveer/Relay.git
+cd Relay
 npm ci
 npm test
 npm run dev
@@ -89,4 +93,6 @@ MIT. Copyright 2026 Manjeet Singh. Third-party programs are not included. See [d
 
 ## GitHub
 
-Name, description, and topic suggestions for the public repository are in [docs/github.md](docs/github.md). There is no download counter and no CI badge in this README, because those would point at a workflow that has not run yet.
+Issues and pull requests: https://github.com/manjeetsingh-satveer/Relay/issues
+
+Topic suggestions are in [docs/github.md](docs/github.md). This README has no download counter and no CI badge. The Actions workflow has not run on GitHub yet, so a badge would be a broken image.
