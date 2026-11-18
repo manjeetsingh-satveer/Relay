@@ -53,6 +53,8 @@ export const api = {
   saveKey: (id: IntegrationId, apiKey: string) =>
     request(`/api/integrations/${id}/credentials`, { method: "PUT", body: JSON.stringify({ apiKey }) }),
   deleteKey: (id: IntegrationId) => request(`/api/integrations/${id}/credentials`, { method: "DELETE" }),
+  openLogin: (id: IntegrationId) =>
+    request<{ detail: string }>(`/api/integrations/${id}/open-login`, { method: "POST", body: "{}" }),
   probe: (id: IntegrationId, kind: "key" | "live") =>
     request<{ ok: boolean; detail: string }>(`/api/integrations/${id}/probe`, { method: "POST", body: JSON.stringify({ kind }) }),
   addContact: (name: string, phone: string, notes: string) =>

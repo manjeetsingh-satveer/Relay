@@ -1,21 +1,21 @@
 # Relay
 
-One desktop chat that sends work to the AI tools you already use, then brings the reply and the files back. It can also open a real Linux machine in a Computer tab.
+One desktop chat that drives the AI websites you are already signed into. The browser runs inside Relay's Linux machine. You sign in there yourself, including MFA or a human check. Relay types the prompt, waits for the page to finish, and copies the answer back with a label such as "via Claude web app".
 
-You connect each account once. Relay does not pretend a tool is connected, and it does not answer as if it were the model when no provider is ready.
+API keys are optional and off unless you turn them on. Relay does not type or store your website password.
 
 ## Status
 
 This is version 0.1.0.
 
-- Chat, projects, follow-ups, cancellation, retries, and files returned by a provider are implemented.
-- Draft, then an independent review, then one revision, with turn, time, and call limits.
-- OpenAI, Anthropic, Gemini, Perplexity, the xAI API, Cursor cloud agents, and Claude Code have adapters. They stay idle until you store a key or install the CLI.
-- Nace Drex can choose the agent. Drex does not write the chat reply, and it is not a virtual machine.
-- Grok Bot chat and Grok Bot phone calls are unsupported. The docs describe those features inside the Grok Bot apps, not as an API.
-- The Computer tab drives QEMU and noVNC. The app download does not contain the Ubuntu image.
+- The default path is the website in the VM: Claude, ChatGPT, Gemini, Perplexity, and the Grok website. Selectors for each site are in `src/browser/sites.ts`.
+- Claude Code and the Cursor CLI run inside that same VM, using the login on that machine.
+- API adapters remain available after you enable them in Settings.
+- Drex can still choose an agent when you store a Nace key. Without that key, routing is local rules or the agent you pick.
+- Grok Bot chat and Grok Bot phone calls are unsupported.
+- The Computer tab is QEMU plus noVNC. The download does not contain Ubuntu or a browser profile.
 
-No provider call was completed in the environment that produced this tree, because no API keys were available. `npm test` proves the local behavior and the request shapes. Live tests are skipped until you export keys. See [docs/credentials.md](docs/credentials.md).
+The website flow was tested against local fixture pages in Chrome, not against live claude.ai or chatgpt.com. A logged-in VM desktop was not booted here. See [docs/integrations.md](docs/integrations.md).
 
 ![Chat after a send with no provider connected. The task is marked failed and no assistant reply was added.](docs/images/chat.png)
 
@@ -41,9 +41,9 @@ npm run dev
 
 Open http://127.0.0.1:43123.
 
-Create a project, store one API key under Integrations, and send a message. If you send before that, the task fails and the transcript does not invent an assistant reply.
+Create a project. To use a website, start the VM from Computer and sign in on that desktop. Sending before the VM browser is up fails, and the transcript does not invent an assistant reply.
 
-Keys in `npm run dev` stay in memory. Quit the process and they are gone.
+Dev mode keeps optional API keys in memory. The Electron app can store those keys with the OS when you enable the API path. Website passwords are never stored.
 
 ## Desktop app
 
@@ -64,17 +64,16 @@ Open Computer, run the check, then download. Relay fetches the official Ubuntu 2
 
 The table in the app is the same registry as [docs/integrations.md](docs/integrations.md). Short version:
 
-| | Chat or task | Needs |
+| | Default path | Needs |
 | --- | --- | --- |
-| OpenAI API | Supported | API key, separate from ChatGPT Plus |
-| Anthropic API | Supported | API key, separate from claude.ai |
-| Gemini API | Supported | API key, separate from the Gemini app |
-| Perplexity Agent API | Supported | API key. Comet is unsupported |
-| xAI API | Supported | API key and a model id you set. This is not Grok Bot |
-| Cursor cloud agents | Supported | API key. Add a repository URL for repo work |
-| Claude Code | Supported if `claude` is installed | A real run to prove the login |
-| Nace Drex | Routing only | API key |
-| Grok Bot | Unsupported, including phone calls | No documented API for this |
+| Claude, ChatGPT, Gemini, Perplexity, Grok website | The site in the VM browser | You sign in on the Computer tab. No API key |
+| Claude Code, Cursor CLI | The CLI inside the VM | That binary, and the login you create there |
+| OpenAI, Anthropic, Gemini, Perplexity, xAI, Cursor APIs | Off until Settings enables API keys | An API key, which a website login does not include |
+| Nace Drex | Optional router | API key. Local rules work without it |
+| Grok Bot, including phone calls | Unsupported | No documented API |
+| Comet | Unsupported | No documented task API. perplexity.ai is the web path |
+
+Driving a consumer website can conflict with that service's terms. The matrix in [docs/integrations.md](docs/integrations.md) links each terms page.
 
 ## Develop
 

@@ -1,6 +1,34 @@
 # Integrations
 
-Checked against official docs on 18 November 2026. A row is "working" only after a live request. This repository's default test run does not have provider keys, so none of these rows were marked working from a live call here.
+The default path is a browser inside the Relay VM. You sign in on the Computer tab. Relay then uses Playwright, attached to that browser, to type a prompt and copy the finished answer. The browser profile stays on the VM disk at `~/.config/relay-chrome` and is not committed.
+
+Live website DOM was not verified. Selectors are in `src/browser/sites.ts`. The first selector in each list is what the fixture tests use. Later selectors are guesses. A miss is reported as selector breakage, and no reply is invented.
+
+Automating a consumer website can violate that service's terms. Read them before you rely on this.
+
+| Surface | Path | Terms | Verified here |
+| --- | --- | --- | --- |
+| claude.ai | VM browser | https://www.anthropic.com/legal/consumer-terms | Fixture page only |
+| chatgpt.com | VM browser | https://openai.com/policies/terms-of-use | Fixture page only |
+| gemini.google.com | VM browser | https://policies.google.com/terms | Fixture page only |
+| perplexity.ai | VM browser | https://www.perplexity.ai/hub/legal/terms-of-service | Fixture page only |
+| grok.com | VM browser. Not Grok Bot | https://x.ai/legal/terms-of-service | Fixture page only |
+| Claude Code | `claude` inside the VM | https://www.anthropic.com/legal/consumer-terms | Helper allowlist only. No live CLI |
+| Cursor CLI | `cursor-agent` inside the VM | https://cursor.com/terms-of-service | Helper allowlist only. Binary not run |
+| API adapters | Off until Settings enables them | Each provider's API terms | Request shapes only. No live key |
+| Drex | Optional router | https://console.nace.ai/docs/drex | Parser tests only |
+| Grok Bot | Unsupported, including calls | https://docs.x.ai/grok-bot/chat-and-collaboration | No API exists for this |
+| Comet | Unsupported | Perplexity's terms | No task API found |
+
+Checked against official product docs on 18 November 2026 for what each API does and does not offer. The website rows are a choice to drive the page, not a claim that the vendor supports that.
+
+## What a website login does not give you
+
+A ChatGPT, Claude, Gemini, or Perplexity login is not an API key. Leave API keys off if you only want the websites.
+
+## Phone calls
+
+"Call Arpanjeet" still resolves a contact you saved and then reports that no call was placed. Grok Bot's calling feature stays inside the Grok Bot apps.
 
 | Product | Relay status | Interface Relay uses | What a subscription does not give you |
 | --- | --- | --- | --- |

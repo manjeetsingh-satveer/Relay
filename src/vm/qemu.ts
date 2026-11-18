@@ -128,7 +128,7 @@ export function buildQemuArgs(plan: QemuPlan): string[] {
     "-vga", "std",
     "-drive", `if=virtio,format=qcow2,file=${plan.overlay}`,
     "-drive", `if=virtio,format=raw,file=${plan.seedIso},media=cdrom,read-only=on`,
-    "-netdev", "user,id=n0",
+    "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:9222-:9222,hostfwd=tcp:127.0.0.1:43125-:43125",
     "-device", "virtio-net-pci,netdev=n0",
     "-vnc", `127.0.0.1:${display},to=0`,
     "-qmp", `unix:${plan.qmpSocket},server,nowait`,

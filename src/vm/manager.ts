@@ -68,7 +68,8 @@ export class VmManager {
     }
     await run("qemu-img", ["create", "-f", "qcow2", "-F", "qcow2", "-b", baseImage, overlay, "32G"]);
     const password = randomBytes(12).toString("base64url");
-    const userData = cloudInit(password);
+    const assets = await loadGuestAssets();
+    const userData = cloudInit(password, assets.helper, assets.chrome);
     const metaData = "instance-id: relay\nlocal-hostname: relay\n";
     await writeFile(path.join(dir, "user-data"), userData, { mode: 0o600 });
     await writeFile(path.join(dir, "meta-data"), metaData);
@@ -185,7 +186,24 @@ export class VmManager {
   }
 }
 
-export function cloudInit(password: string): string {
+export async function loadGuestAssets(): Promise<{ helper: string; chrome: string }> {
+  const roots = [process.cwd(), path.resolve(path.dirname(process.argv[1] ?? "."), "..")];
+  for (const root of roots) {
+    try {
+      return {
+        helper: await readFile(path.join(root, "guest/relay-helper.py"), "utf8"),
+        chrome: await readFile(path.join(root, "guest/relay-chrome.sh"), "utf8"),
+      };
+    } catch {
+      continue;
+    }
+  }
+  throw new RelayError("guest-files", "Could not read guest/relay-helper.py. The VM was not provisioned.");
+}
+
+export function cloudInit(password: string, helper: string, chrome: string): string {
+  const helperB64 = Buffer.from(helper, "utf8").toString("base64");
+  const chromeB64 = Buffer.from(chrome, "utf8").toString("base64");
   return `#cloud-config
 hostname: relay
 users:
@@ -208,12 +226,19 @@ packages:
   - xinit
   - dbus-x11
   - fonts-dejavu-core
+  - python3
 write_files:
   - path: /home/relay/.xinitrc
     owner: relay:relay
     permissions: "0755"
     content: |
       exec startxfce4
+  - path: /opt/relay/relay-helper.b64
+    content: ${helperB64}
+    permissions: "0644"
+  - path: /opt/relay/relay-chrome.b64
+    content: ${chromeB64}
+    permissions: "0644"
   - path: /etc/systemd/system/relay-desktop.service
     content: |
       [Unit]
@@ -227,10 +252,34 @@ write_files:
       RestartSec=5
       [Install]
       WantedBy=multi-user.target
+  - path: /etc/systemd/system/relay-helper.service
+    content: |
+      [Unit]
+      Description=Relay guest CLI helper
+      After=network.target
+      [Service]
+      ExecStart=/usr/bin/python3 /opt/relay/relay-helper.py
+      Restart=on-failure
+      [Install]
+      WantedBy=multi-user.target
+  - path: /home/relay/.config/autostart/relay-chrome.desktop
+    owner: relay:relay
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Relay Chrome
+      Exec=/usr/local/bin/relay-chrome
 runcmd:
+  - mkdir -p /opt/relay /usr/local/bin /home/relay/.config/relay-chrome
+  - base64 -d /opt/relay/relay-helper.b64 > /opt/relay/relay-helper.py
+  - base64 -d /opt/relay/relay-chrome.b64 > /usr/local/bin/relay-chrome
+  - chmod 755 /opt/relay/relay-helper.py /usr/local/bin/relay-chrome
+  - chown -R relay:relay /home/relay/.config
+  - apt-get install -y chromium || apt-get install -y chromium-browser || true
   - systemctl daemon-reload
-  - systemctl enable relay-desktop.service
+  - systemctl enable relay-desktop.service relay-helper.service
   - systemctl start relay-desktop.service || true
+  - systemctl start relay-helper.service || true
 `;
 }
 

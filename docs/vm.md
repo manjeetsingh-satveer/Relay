@@ -25,6 +25,12 @@ Relay reads:
 
 If KVM is missing, software emulation runs only after you check the approval box. If reported memory is low, you can approve continuing. Relay does not close other programs or change host settings.
 
+## Browser and CLIs
+
+Chromium starts on the guest desktop with a profile in the guest home directory and a debugging port. QEMU forwards that port only to `127.0.0.1:9222` on the host. Playwright on the host attaches to it. The profile is not in Git.
+
+A small Python helper in the guest, `guest/relay-helper.py`, listens on `127.0.0.1:43125` and may run only `claude`, `cursor-agent`, or `agent`. It does not receive passwords.
+
 ## Guest
 
 Ubuntu 24.04 cloud image, with cloud-init installing XFCE, Xorg, and a `startx` service. The serial log is the installation progress. The framebuffer is blank or textual until the guest actually starts X. Relay does not show a "desktop ready" state it cannot see.

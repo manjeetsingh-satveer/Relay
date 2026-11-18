@@ -43,6 +43,7 @@ describe("http api", () => {
     const thread = await get(base, `/api/conversations/${conversation.id}`);
     expect(thread.tasks[0].status).toBe("failed");
     expect(thread.tasks[0].providerStarted).toBe(false);
+    expect(thread.tasks[0].error).toMatch(/Nothing was sent/);
     expect(thread.messages.some((message: { role: string }) => message.role === "assistant")).toBe(false);
     const again = await post(base, `/api/conversations/${conversation.id}/messages`, {
       text: "Build a portfolio website",
@@ -62,6 +63,13 @@ describe("http api", () => {
     await secrets.set("openai", "sk-test-openai");
     await secrets.set("anthropic", "sk-test-anthropic");
     const base = `http://127.0.0.1:${server.port}`;
+    const boot = await get(base, "/api/bootstrap");
+    const saved = await fetch(base + "/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...boot.settings, useApiKeys: true }),
+    });
+    if (!saved.ok) throw new Error(await saved.text());
     const project = await post(base, "/api/projects", { name: "Site" });
     const conversation = await post(base, "/api/conversations", { projectId: project.id });
     await post(base, `/api/conversations/${conversation.id}/messages`, {

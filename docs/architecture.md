@@ -34,7 +34,9 @@ If Relay restarts while a task is `running`, the task becomes `interrupted` and 
 
 ## Adapters
 
-Each adapter records support, install state, whether a credential is stored, and the last real result separately. Grok Bot's adapter refuses to run. Drex is a router, not a chat adapter.
+The default adapters drive a browser inside the VM. Playwright on the host attaches to Chromium's debugging port, which QEMU forwards only to 127.0.0.1. The profile stays on the VM disk. Selectors are in `src/browser/sites.ts`. Page text is copied as untrusted data.
+
+API adapters run only after Settings turns API keys on. Drex remains an optional router. Grok Bot refuses to run.
 
 Session text is specific. "Continued" means the provider accepted a previous response id or a CLI session id. "Copied" means Relay put earlier turns into a new request because that API has no server-side session.
 

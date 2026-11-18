@@ -15,9 +15,9 @@ export interface RouteDecision {
 const CODING = /\b(build|implement|code|website|portfolio|refactor|fix|bug|component|function|repository|repo|html|css)\b/i;
 const RESEARCH = /\b(research|sources?|cite|citation|news|latest|compare|who is|what is|look up)\b/i;
 
-const CHAT_ORDER: IntegrationId[] = ["anthropic", "openai", "gemini", "xai", "perplexity"];
-const CODING_ORDER: IntegrationId[] = ["cursor", "claude-code", "anthropic", "openai", "gemini", "xai"];
-const RESEARCH_ORDER: IntegrationId[] = ["perplexity", "anthropic", "openai", "gemini", "xai"];
+const CHAT_ORDER: IntegrationId[] = ["claude-web", "chatgpt-web", "gemini-web", "perplexity-web", "grok-web", "anthropic", "openai", "gemini", "xai", "perplexity"];
+const CODING_ORDER: IntegrationId[] = ["claude-code", "cursor-cli", "claude-web", "chatgpt-web", "cursor", "anthropic", "openai", "gemini"];
+const RESEARCH_ORDER: IntegrationId[] = ["perplexity-web", "claude-web", "chatgpt-web", "gemini-web", "perplexity", "anthropic", "openai"];
 
 export function routeLocal(input: {
   prompt: string;
@@ -43,7 +43,7 @@ export function routeLocal(input: {
   if (usable.length === 0) {
     throw new RelayError(
       "no_agent",
-      "No supported agent is ready. Store a credential for one on the Integrations tab. Nothing was sent.",
+      "No web app is reachable. Start the Linux VM from the Computer tab and sign in there. API keys are optional and off unless you enable them. Nothing was sent.",
     );
   }
   const order = CODING.test(input.prompt)
@@ -63,7 +63,7 @@ export function routeLocal(input: {
 function finish(input: { mode: "single" | "collaborative"; allowSameAgentReview: boolean }, ranked: IntegrationView[], explanation: string): RouteDecision {
   const primary = ranked[0];
   if (!primary) {
-    throw new RelayError("no_agent", "No supported agent is ready. Nothing was sent.");
+    throw new RelayError("no_agent", "No web app is reachable. Start the Linux VM from the Computer tab and sign in there. Nothing was sent.");
   }
   if (input.mode === "single") {
     return {
@@ -103,10 +103,10 @@ function finish(input: { mode: "single" | "collaborative"; allowSameAgentReview:
 
 export function canExecute(view: IntegrationView): boolean {
   if (view.support !== "supported") return false;
+  if (!view.availableForRouting) return false;
   if (view.id === "drex" || view.id === "grok-bot") return false;
   if (view.install === "not-installed") return false;
   if (view.credential === "api-key" && view.auth !== "stored") return false;
-  if (view.credential === "local-cli" && view.install !== "installed") return false;
   return view.capabilities.chat || view.capabilities.codingAgent;
 }
 

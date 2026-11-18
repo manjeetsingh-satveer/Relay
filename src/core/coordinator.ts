@@ -2,6 +2,9 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterRuntime, ExecuteResult } from "../adapters/execute.ts";
 import { EXECUTORS } from "../adapters/execute.ts";
+import { adapterMeta } from "../adapters/catalog.ts";
+import { runWebTask } from "../browser/cdp.ts";
+import { runGuestCli } from "../browser/guest-cli.ts";
 import { requestJson } from "../adapters/http.ts";
 import { mediaTypeFor, safeArtifactName } from "./artifacts.ts";
 import { RelayError, isRelayError } from "./errors.ts";
@@ -220,8 +223,6 @@ export class Coordinator {
     review: string,
     signal: AbortSignal,
   ): Promise<ExecuteResult> {
-    const execute = EXECUTORS[view.id];
-    if (!execute) throw new RelayError("unsupported", `${view.displayName} cannot run a task.`);
     const conversation = this.store.conversation(input.conversationId);
     if (!conversation) throw new RelayError("not_found", "Conversation not found.", 404);
     const session = conversation.sessions[view.id];
@@ -246,9 +247,33 @@ export class Coordinator {
     });
     const startedAt = new Date().toISOString();
     const project = this.store.project(conversation.projectId);
+    const meta = adapterMeta(view.id);
     let result: ExecuteResult;
     try {
-      result = await execute(
+      if (meta.credential === "browser") {
+        result = await runWebTask({
+          cdpUrl: "http://127.0.0.1:9222",
+          siteId: view.id,
+          prompt,
+          continuedUrl: continued ? session?.providerSessionId : undefined,
+          timeoutMs: this.store.data.settings.limits.maxWallClockMs,
+          signal,
+        });
+      } else if (meta.credential === "vm-cli") {
+        result = await runGuestCli({
+          url: "http://127.0.0.1:43125/cli",
+          bin: view.id === "cursor-cli" ? "cursor-agent" : "claude",
+          prompt,
+          resume: continued ? session?.providerSessionId : undefined,
+          model: view.model,
+          timeoutMs: this.store.data.settings.limits.maxWallClockMs,
+          signal,
+          fetchImpl: this.runtime.fetchImpl,
+        });
+      } else {
+        const execute = EXECUTORS[view.id];
+        if (!execute) throw new RelayError("unsupported", `${view.displayName} cannot run a task.`);
+        result = await execute(
         {
           prompt,
           role,
@@ -262,7 +287,8 @@ export class Coordinator {
           signal,
         },
         this.runtime,
-      );
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Provider call failed";
       await this.recordAttempt(view.id, false, message);

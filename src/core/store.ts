@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "claude-code": "sonnet",
   },
   allowSameAgentReview: false,
+  useApiKeys: false,
 };
 
 export function emptyStore(): StoreData {

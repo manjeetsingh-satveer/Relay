@@ -1,11 +1,17 @@
 export const INTEGRATION_IDS = [
+  "claude-web",
+  "chatgpt-web",
+  "gemini-web",
+  "perplexity-web",
+  "grok-web",
+  "claude-code",
+  "cursor-cli",
   "openai",
   "anthropic",
   "gemini",
   "perplexity",
   "xai",
   "cursor",
-  "claude-code",
   "grok-bot",
   "drex",
 ] as const;
@@ -49,7 +55,8 @@ export interface IntegrationView {
   lastSuccess?: CheckRecord;
   latestAttempt?: CheckRecord;
   capabilities: Capabilities;
-  credential: "api-key" | "none" | "local-cli";
+  credential: "api-key" | "none" | "vm-cli" | "browser";
+  availableForRouting: boolean;
   model: string;
   modelEditable: boolean;
   modelHelp: string;
@@ -171,6 +178,7 @@ export interface Settings {
   limits: Limits;
   models: Partial<Record<IntegrationId, string>>;
   allowSameAgentReview: boolean;
+  useApiKeys: boolean;
 }
 
 export interface CallResolution {

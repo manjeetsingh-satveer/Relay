@@ -5,6 +5,7 @@ directories:
   output: release
 files:
   - dist/**/*
+  - guest/**/*
   - package.json
 asar: true
 win:

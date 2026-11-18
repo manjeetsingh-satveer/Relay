@@ -193,11 +193,11 @@ function Chat(props: {
   const [agentId, setAgentId] = useState("auto");
   const [busy, setBusy] = useState(false);
   const pendingKey = useRef<string | null>(null);
-  const ready = props.boot.integrations.filter((item) => item.support === "supported" && item.id !== "drex" && item.id !== "grok-bot");
+  const ready = props.boot.integrations.filter((item) => item.availableForRouting);
   const running = props.thread?.tasks.some((task) => task.status === "running") ?? false;
 
   if (!props.conversationId || !props.thread) {
-    return <div className="scroll" style={{ padding: 28 }}><h1 className="serif" style={{ fontWeight: 500 }}>Start with a project.</h1><p style={{ maxWidth: 560, color: "var(--muted-foreground)" }}>Relay does not answer by itself. Connect an API key, then send a task. If nothing is connected, the send fails in the open instead of inventing a reply.</p></div>;
+    return <div className="scroll" style={{ padding: 28 }}><h1 className="serif" style={{ fontWeight: 500 }}>Start with a project.</h1><p style={{ maxWidth: 560, color: "var(--muted-foreground)" }}>Relay does not answer by itself. Start the Linux VM, sign in to Claude or ChatGPT in that desktop, then send a task. If the browser is not signed in, the task stops and says so. API keys stay off unless you enable them.</p></div>;
   }
 
   return (
@@ -337,7 +337,10 @@ function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<
           <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{item.modelHelp}</span>
         </label>
       ) : <p style={{ fontSize: 13 }}>{item.modelHelp}</p>}
-      {item.credential !== "none" ? (
+      {item.credential === "browser" ? (
+        <Button size="sm" variant="outline" onClick={() => api.openLogin(item.id).then((result) => props.onError(result.detail)).catch((reason) => props.onError(reason.message))}>Open sign-in in the VM</Button>
+      ) : null}
+      {item.credential === "api-key" ? (
         <form
           className="row"
           onSubmit={async (event) => {
@@ -363,10 +366,10 @@ function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<
         {item.credential === "api-key" && item.id !== "anthropic" && item.id !== "perplexity" ? (
           <Button size="sm" variant="outline" onClick={() => api.probe(item.id, "key").then(props.refresh).catch((reason) => props.onError(reason.message))}>Check key</Button>
         ) : null}
-        {item.support === "supported" && item.id !== "cursor" && item.id !== "claude-code" && item.id !== "xai" ? (
+        {item.credential === "api-key" && item.id !== "cursor" && item.id !== "xai" ? (
           <Button size="sm" variant="outline" onClick={() => api.probe(item.id, "live").then(props.refresh).catch((reason) => props.onError(reason.message))}>Live check</Button>
         ) : null}
-        {item.id === "claude-code" ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>A live Claude Code check runs from chat, in the project workspace.</span> : null}
+        {item.credential === "vm-cli" ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>This CLI runs inside the VM. Log in there. Relay does not type the password.</span> : null}
       </div>
     </article>
   );
@@ -413,7 +416,7 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
-      <p style={{ maxWidth: 760 }}>This is a QEMU virtual machine, displayed with noVNC. The installer does not contain an Ubuntu image. First run downloads the official Ubuntu 24.04 cloud image and checks its SHA256 against the checksum file from cloud-images.ubuntu.com. GPG verification of that checksum file is not performed.</p>
+      <p style={{ maxWidth: 760 }}>This is a QEMU virtual machine, displayed with noVNC. Sign in to Claude, ChatGPT, Gemini, or Perplexity in the browser on this desktop. Relay does not see or type your password. The browser profile stays on the VM disk. The installer does not contain an Ubuntu image. First run downloads the official Ubuntu 24.04 cloud image and checks its SHA256. GPG verification of that checksum file is not performed.</p>
       <div className="row">
         <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button>
         {!record ? <Button onClick={() => api.provision({ allowSoftwareEmulation: allowTcg, acknowledgeLowMemory: lowMemory }).then(props.refresh).catch((reason) => props.onError(reason.message))}>Download and provision</Button> : null}
@@ -539,6 +542,7 @@ function SettingsPanel(props: { boot: Bootstrap; refresh: () => Promise<unknown>
       <Input type="number" value={settings.limits.maxWallClockMs} onChange={(event) => setSettings({ ...settings, limits: { ...settings.limits, maxWallClockMs: Number(event.target.value) } })} />
       <Label>Max turns</Label>
       <Input type="number" value={settings.limits.maxTurns} onChange={(event) => setSettings({ ...settings, limits: { ...settings.limits, maxTurns: Number(event.target.value) } })} />
+      <label className="row"><input type="checkbox" checked={settings.useApiKeys} onChange={(event) => setSettings({ ...settings, useApiKeys: event.target.checked })} /> Also allow API-key adapters. Off by default. The website path does not need a key.</label>
       <label className="row"><input type="checkbox" checked={settings.allowSameAgentReview} onChange={(event) => setSettings({ ...settings, allowSameAgentReview: event.target.checked })} /> Allow the same agent to review its own draft</label>
       <Button type="submit">Save settings</Button>
     </form>

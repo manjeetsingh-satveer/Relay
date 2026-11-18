@@ -1,6 +1,8 @@
 # Credentials
 
-Relay does not ship with provider accounts. Paste keys in the app. Do not put them in Git.
+The default path needs no API key. Sign in to each website yourself in the VM desktop. Relay does not ask for, store, or type that password.
+
+API keys are optional. Turn them on in Settings only if you want the API adapters. Do not put keys in Git.
 
 Set `RELAY_LIVE=1` and only the variables you have, then run `npm test`. Each missing variable skips that live test. The tests send a short prompt. They spend a small amount of quota. They do not place phone calls.
 

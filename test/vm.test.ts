@@ -49,6 +49,7 @@ describe("qemu plan", () => {
       serialLog: "/tmp/relay/serial.log",
       pidFile: "/tmp/relay/qemu.pid",
     });
+    expect(args.join(" ")).toContain("hostfwd=tcp:127.0.0.1:9222-:9222");
     expect(args).toContain("127.0.0.1:1,to=0");
     expect(args.join(" ")).not.toContain("fsdev");
     expect(() => chooseAccel({ platform: "linux", kvm: false, allowSoftwareEmulation: false })).toThrow(/not approved/);

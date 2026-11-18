@@ -2,7 +2,7 @@
 
 These are real gaps in this tree. They are not assigned, and the GitHub label does not exist until the repository is published and someone creates `good first issue`.
 
-1. **Stream OpenAI text.** `executeOpenAI` waits for the full Responses body. The API can stream. Show deltas as progress events without inventing tokens if the stream fails.
+1. **Update one site's selectors.** `src/browser/sites.ts` holds every selector. The live DOM was not verified. Pick one site, sign in inside the VM, and replace the guesses with selectors you actually saw. Add a fixture assertion if the shape changed.
 2. **Show Cursor `durationMs` in the task header.** The run payload already includes it, and the adapter appends it to the session detail. A small UI line would make it easier to see.
 3. **Per-project default agent.** The composer can select an agent for one send. Remember that choice on the project.
 4. **CSV contact import.** Accept a file the user picks. Do not read the Windows address book.

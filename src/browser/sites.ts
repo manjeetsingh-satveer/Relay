@@ -1,0 +1,127 @@
+import type { IntegrationId } from "../shared/types.ts";
+
+/** Selectors live here so a contributor can fix a site without hunting through the driver. */
+export interface SiteSelectors {
+  composer: string[];
+  send: string[];
+  assistant: string[];
+  code: string[];
+  login: string[];
+  captcha: string[];
+  rateLimit: string[];
+  streaming: string[];
+  stop: string[];
+}
+
+export interface SiteDefinition {
+  id: IntegrationId;
+  label: string;
+  homeUrl: string;
+  termsUrl: string;
+  termsNote: string;
+  selectors: SiteSelectors;
+}
+
+const fixture = "[data-relay='composer']";
+
+/**
+ * The first selector in each list is the fixture attribute used by tests.
+ * Later selectors are unconfirmed guesses for the live site. They were not
+ * checked against a logged-in session. When a site changes, edit this file.
+ */
+export const WEB_SITES: SiteDefinition[] = [
+  {
+    id: "claude-web",
+    label: "via Claude web app",
+    homeUrl: "https://claude.ai/new",
+    termsUrl: "https://www.anthropic.com/legal/consumer-terms",
+    termsNote: "Anthropic's consumer terms restrict how claude.ai may be accessed. Driving the website can violate those terms. Relay types only into the composer you already opened.",
+    selectors: {
+      composer: [fixture, "div.ProseMirror", "fieldset [contenteditable='true']"],
+      send: ["[data-relay='send']", "button[aria-label='Send message']", "button[aria-label='Send Message']"],
+      assistant: ["[data-relay='assistant']", "[data-testid='conversation-turn']", "div.font-claude-message"],
+      code: ["[data-filename]", "pre code"],
+      login: ["[data-relay='login']", "a[href*='login']", "button:text-is('Continue with Google')"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='captcha']", "iframe[src*='hcaptcha']", "iframe[src*='recaptcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/usage limit|rate limit|message limit/i"],
+      streaming: ["[data-relay='streaming']"],
+      stop: ["[data-relay='stop']", "button[aria-label='Stop response']"],
+    },
+  },
+  {
+    id: "chatgpt-web",
+    label: "via ChatGPT web app",
+    homeUrl: "https://chatgpt.com/",
+    termsUrl: "https://openai.com/policies/terms-of-use",
+    termsNote: "OpenAI's terms cover chatgpt.com separately from the API. Automating the website can violate those terms.",
+    selectors: {
+      composer: [fixture, "#prompt-textarea", "textarea[data-id='root']"],
+      send: ["[data-relay='send']", "button[data-testid='send-button']"],
+      assistant: ["[data-relay='assistant']", "[data-message-author-role='assistant']"],
+      code: ["[data-filename]", "pre code"],
+      login: ["[data-relay='login']", "button:text-is('Log in')", "a[href*='/auth/login']"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='captcha']", "iframe[src*='hcaptcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/rate limit|too many requests|usage cap/i"],
+      streaming: ["[data-relay='streaming']", "button[data-testid='stop-button']"],
+      stop: ["[data-relay='stop']", "button[data-testid='stop-button']"],
+    },
+  },
+  {
+    id: "gemini-web",
+    label: "via Gemini web app",
+    homeUrl: "https://gemini.google.com/app",
+    termsUrl: "https://policies.google.com/terms",
+    termsNote: "Google's terms cover gemini.google.com. Automating that site can violate those terms. This is not the Gemini API.",
+    selectors: {
+      composer: [fixture, "rich-textarea [contenteditable='true']", "div.ql-editor"],
+      send: ["[data-relay='send']", "button[aria-label='Send message']"],
+      assistant: ["[data-relay='assistant']", "message-content", "model-response"],
+      code: ["[data-filename]", "pre code"],
+      login: ["[data-relay='login']", "a[href*='ServiceLogin']", "a[aria-label='Sign in']"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='recaptcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/quota|rate limit|try again later/i"],
+      streaming: ["[data-relay='streaming']"],
+      stop: ["[data-relay='stop']", "button[aria-label='Stop response']"],
+    },
+  },
+  {
+    id: "perplexity-web",
+    label: "via Perplexity web app",
+    homeUrl: "https://www.perplexity.ai/",
+    termsUrl: "https://www.perplexity.ai/hub/legal/terms-of-service",
+    termsNote: "Perplexity's terms cover perplexity.ai. Automating the site can violate those terms. Comet, the Perplexity browser, is a different product and is not driven here.",
+    selectors: {
+      composer: [fixture, "textarea[placeholder*='Ask']", "div[contenteditable='true']"],
+      send: ["[data-relay='send']", "button[aria-label='Submit']"],
+      assistant: ["[data-relay='assistant']", "[data-testid='answer']"],
+      code: ["[data-filename]", "pre code"],
+      login: ["[data-relay='login']", "button:text-is('Sign in')"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/rate limit|quota exceeded/i"],
+      streaming: ["[data-relay='streaming']"],
+      stop: ["[data-relay='stop']"],
+    },
+  },
+  {
+    id: "grok-web",
+    label: "via Grok web app",
+    homeUrl: "https://grok.com/",
+    termsUrl: "https://x.ai/legal/terms-of-service",
+    termsNote: "grok.com is the Grok website. It is not Grok Bot. Grok Bot's phone calls are still unavailable. xAI's terms cover use of the website.",
+    selectors: {
+      composer: [fixture, "textarea", "div[contenteditable='true']"],
+      send: ["[data-relay='send']", "button[aria-label='Send']"],
+      assistant: ["[data-relay='assistant']", "[data-testid='assistant-message']"],
+      code: ["[data-filename]", "pre code"],
+      login: ["[data-relay='login']", "a[href*='login']"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/rate limit/i"],
+      streaming: ["[data-relay='streaming']"],
+      stop: ["[data-relay='stop']"],
+    },
+  },
+];
+
+export function siteById(id: IntegrationId): SiteDefinition | undefined {
+  return WEB_SITES.find((site) => site.id === id);
+}

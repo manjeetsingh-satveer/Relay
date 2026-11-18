@@ -13,6 +13,7 @@ function view(partial: Partial<IntegrationView> & Pick<IntegrationView, "id">): 
     authDetail: "",
     capabilities: { chat: true, files: true, review: true, codingAgent: partial.id === "cursor" || partial.id === "claude-code", sessionContinue: false, cancel: true, phone: false },
     credential: "api-key",
+    availableForRouting: true,
     model: "",
     modelEditable: true,
     modelHelp: "",
@@ -23,6 +24,16 @@ function view(partial: Partial<IntegrationView> & Pick<IntegrationView, "id">): 
 describe("local router", () => {
   it("refuses to invent an agent when none are ready", () => {
     expect(() => routeLocal({ prompt: "Hello", mode: "single", available: [], allowSameAgentReview: false })).toThrow(/Nothing was sent/);
+  });
+
+  it("prefers a signed-in website over an API adapter", () => {
+    const decision = routeLocal({
+      prompt: "Hello",
+      mode: "single",
+      available: [view({ id: "openai" }), view({ id: "claude-web", credential: "browser" })],
+      allowSameAgentReview: false,
+    });
+    expect(decision.steps[0]?.adapterId).toBe("claude-web");
   });
 
   it("sends a coding task to Cursor when a repository is set", () => {

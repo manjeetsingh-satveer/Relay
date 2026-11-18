@@ -17,6 +17,8 @@ import { preflight } from "../vm/qemu.ts";
 import { isInside } from "../vm/checksum.ts";
 import { attachVncProxy } from "./vnc.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
+import { openLoginPage } from "../browser/cdp.ts";
+import { siteById } from "../browser/sites.ts";
 
 export interface ServerHandle {
   port: number;
@@ -239,6 +241,14 @@ export async function startServer(options: {
         notify();
         return send(response, 204, null);
       }
+    }
+    const loginMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/open-login$/);
+    if (method === "POST" && loginMatch) {
+      const id = loginMatch[1] as IntegrationId;
+      const site = siteById(id);
+      if (!site) throw new RelayError("unsupported", "That integration has no sign-in page.");
+      const detail = await openLoginPage("http://127.0.0.1:9222", site);
+      return send(response, 200, { detail });
     }
     const probeMatch = url.pathname.match(/^\/api\/integrations\/([^/]+)\/probe$/);
     if (method === "POST" && probeMatch) {
@@ -532,6 +542,7 @@ function sanitizeSettings(body: Record<string, unknown>, current: Settings): Set
     router: body.router === "drex" ? "drex" : "local",
     drexMinConfidence: clamp(numberOr(body.drexMinConfidence, current.drexMinConfidence), 0, 1),
     allowSameAgentReview: body.allowSameAgentReview === true,
+    useApiKeys: body.useApiKeys === undefined ? current.useApiKeys : body.useApiKeys === true,
     models: nextModels,
     limits: {
       maxProviderCalls: clamp(numberOr(limits.maxProviderCalls, current.limits.maxProviderCalls), 1, 20),

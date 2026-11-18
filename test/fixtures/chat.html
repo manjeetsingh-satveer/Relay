@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Relay fixture</title>
+<body>
+  <div data-relay="login" hidden>Sign in</div>
+  <div data-relay="captcha" hidden>Human check</div>
+  <div data-relay="limit" hidden>usage limit reached</div>
+  <form id="chat">
+    <textarea data-relay="composer"></textarea>
+    <button data-relay="send" type="submit">Send</button>
+  </form>
+  <div id="thread"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const gate = params.get("gate");
+    if (gate && gate !== "password") {
+      document.querySelector("[data-relay='" + gate + "']").hidden = false;
+      if (gate === "login") document.querySelector("[data-relay='composer']").remove();
+    }
+    if (gate === "password") {
+      const input = document.createElement("input");
+      input.type = "password";
+      input.setAttribute("data-relay", "composer");
+      document.querySelector("[data-relay='composer']").replaceWith(input);
+    }
+    const delay = Number(params.get("delay") || 150);
+    document.getElementById("chat").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = document.querySelector("[data-relay='composer']").value;
+      const streaming = document.createElement("div");
+      streaming.dataset.relay = "streaming";
+      streaming.textContent = "working";
+      document.body.appendChild(streaming);
+      setTimeout(() => {
+        streaming.remove();
+        const message = document.createElement("article");
+        message.dataset.relay = "assistant";
+        message.style.whiteSpace = "pre-wrap";
+        message.textContent = "Fixture reply to: " + text + "\n```notes.txt\nhello from the page\n```";
+        const code = document.createElement("pre");
+        code.dataset.filename = "page.txt";
+        code.textContent = "named block";
+        message.appendChild(code);
+        document.getElementById("thread").appendChild(message);
+      }, delay);
+    });
+  </script>
+</body>
