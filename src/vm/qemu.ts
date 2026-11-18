@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { access, constants } from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import { statfs } from "node:fs/promises";
 import type { PreflightReport } from "../shared/types.ts";
 
@@ -19,6 +20,44 @@ export function qemuCandidates(platform = process.platform): string[] {
     ];
   }
   return ["qemu-system-x86_64"];
+}
+
+export function qemuImgCandidates(qemuSystemPath: string | null, platform = process.platform): string[] {
+  const windows = platform === "win32";
+  const paths = windows ? path.win32 : path;
+  const names = windows ? ["qemu-img.exe"] : ["qemu-img"];
+  const candidates: string[] = [];
+  if (qemuSystemPath) {
+    const directory = paths.dirname(qemuSystemPath);
+    for (const name of names) candidates.push(paths.join(directory, name));
+  }
+  if (windows) {
+    candidates.push("C:\\Program Files\\qemu\\qemu-img.exe", "C:\\Program Files\\QEMU\\qemu-img.exe");
+  }
+  candidates.push(...names);
+  return candidates;
+}
+
+export async function findQemuImg(qemuSystemPath: string | null, platform = process.platform): Promise<string | null> {
+  for (const candidate of qemuImgCandidates(qemuSystemPath, platform)) {
+    if (candidate.includes("\\") || candidate.includes("/") || /^[A-Za-z]:/.test(candidate)) {
+      try {
+        await access(candidate, constants.F_OK);
+        return candidate;
+      } catch {
+        continue;
+      }
+    }
+    try {
+      const locator = platform === "win32" ? "where" : "which";
+      const { stdout } = await run(locator, [candidate]);
+      const found = stdout.split(/\r?\n/).find(Boolean)?.trim();
+      if (found) return found;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 export async function findQemu(platform = process.platform): Promise<string | null> {
@@ -131,7 +170,7 @@ export function buildQemuArgs(plan: QemuPlan): string[] {
     "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:9222-:9222,hostfwd=tcp:127.0.0.1:43125-:43125",
     "-device", "virtio-net-pci,netdev=n0",
     "-vnc", `127.0.0.1:${display},to=0`,
-    "-qmp", `unix:${plan.qmpSocket},server,nowait`,
+    "-qmp", plan.qmpSocket.startsWith("tcp:") ? `${plan.qmpSocket},server=on,wait=off` : `unix:${plan.qmpSocket},server,nowait`,
     "-serial", `file:${plan.serialLog}`,
     "-pidfile", plan.pidFile,
   ];

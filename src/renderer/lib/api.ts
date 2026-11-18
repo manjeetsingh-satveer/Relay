@@ -68,6 +68,7 @@ export const api = {
   preflight: () => request<NonNullable<VmView["preflight"]>>("/api/vm/preflight", { method: "POST", body: "{}" }),
   provision: (body: { allowSoftwareEmulation?: boolean; acknowledgeLowMemory?: boolean }) =>
     request<VmView>("/api/vm/provision", { method: "POST", body: JSON.stringify(body) }),
+  vmLog: () => request<{ text: string; running: boolean }>("/api/vm/log"),
   vmAction: (action: "start" | "shutdown" | "pause" | "resume" | "force-stop") =>
     request<VmView & { detail?: string }>(`/api/vm/${action}`, { method: "POST", body: "{}" }),
   share: (sharePath: string, writable: boolean) =>

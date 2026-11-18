@@ -28,7 +28,9 @@ Relay sends a client agent id derived from the idempotency key. A 409 means that
 
 ## The Computer tab will not download
 
-Read the preflight text. It quotes the memory and disk figures from the OS. Install QEMU if the binary line says it is missing. On Windows, WHPX errors appear in the QEMU log; Relay does not enable the hypervisor feature for you.
+The Computer tab shows the provision log while the download runs, and again if it fails. The same text is in `data\vm\provision.log`. A second click does nothing until that run finishes. An image whose SHA256 already matches the Ubuntu checksum file is kept and not downloaded again.
+
+On Windows, Relay uses `qemu-img.exe` from the same folder as `qemu-system-x86_64.exe`. It builds the cloud-init seed itself. It does not need `cloud-localds`. The VM monitor uses a local TCP port because Windows QEMU does not use a Unix socket. Relay still asks QEMU for WHPX and does not enable that Windows feature for you.
 
 ## The display stays black
 

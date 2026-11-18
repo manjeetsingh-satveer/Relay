@@ -1,19 +1,28 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { VmRecord } from "../shared/types.ts";
 import { RelayError } from "../core/errors.ts";
 import { downloadVerified, isInside, ubuntuImageSpec } from "./checksum.ts";
-import { buildQemuArgs, chooseAccel, findQemu, preflight, type QemuPlan } from "./qemu.ts";
+import { buildQemuArgs, chooseAccel, findQemu, findQemuImg, preflight, type QemuPlan } from "./qemu.ts";
+import { buildCidataIso } from "./seed-iso.ts";
 
 const run = promisify(execFile);
 
+export type ExecFileImpl = (file: string, args: string[]) => Promise<void>;
+
 export class VmManager {
+  private busy = false;
+
   constructor(private readonly root: string) {}
+
+  isProvisioning(): boolean {
+    return this.busy;
+  }
 
   directory(): string {
     return path.join(this.root, "vm");
@@ -25,76 +34,123 @@ export class VmManager {
     acknowledgeLowMemory: boolean;
     signal?: AbortSignal;
     fetchImpl?: typeof fetch;
+    platform?: NodeJS.Platform;
+    qemuSystemPath?: string;
+    qemuImgPath?: string;
+    execFileImpl?: ExecFileImpl;
+    onProgress?: (message: string) => void;
+    imageSpec?: { fileName: string; imageUrl: string; checksumUrl: string };
   }): Promise<VmRecord> {
-    if (input.record) {
-      throw new RelayError("vm_exists", "A Relay VM already exists in this data directory. It was not replaced.");
+    if (this.busy) {
+      throw new RelayError("busy", "A provision is already running. Wait for it to finish. The image on disk is kept.", 409);
     }
-    const report = await preflight(this.root);
-    if (!report.qemu.found || !report.qemu.path) {
-      throw new RelayError("qemu_missing", report.qemu.detail);
-    }
-    if (!report.memory.ok && !input.acknowledgeLowMemory) {
-      throw new RelayError(
-        "low_memory",
-        `The OS reports ${report.memory.availableBytes} bytes available. Relay asks for ${report.memory.requiredBytes}. Approve low memory to continue. Host settings were not changed.`,
-      );
-    }
-    if (!report.disk.ok) {
-      throw new RelayError(
-        "low_disk",
-        `The OS reports ${report.disk.availableBytes} bytes free. Relay asks for ${report.disk.requiredBytes}. Nothing was downloaded.`,
-      );
-    }
-    const accel = chooseAccel({ kvm: report.virtualization.available, allowSoftwareEmulation: input.allowSoftwareEmulation });
+    this.busy = true;
     const dir = this.directory();
-    await mkdir(dir, { recursive: true });
-    const spec = ubuntuImageSpec();
-    const baseImage = path.join(dir, spec.fileName);
-    const verified = await downloadVerified({
-      imageUrl: spec.imageUrl,
-      checksumUrl: spec.checksumUrl,
-      fileName: spec.fileName,
-      dest: baseImage,
-      fetchImpl: input.fetchImpl,
-      signal: input.signal,
-    });
-    const overlay = path.join(dir, "overlay.qcow2");
+    const log = (message: string) => this.note(dir, message, input.onProgress);
     try {
-      await stat(overlay);
-      throw new RelayError("vm_exists", "overlay.qcow2 already exists. It was not overwritten.");
+      if (input.record) {
+        throw new RelayError("vm_exists", "A Relay VM already exists in this data directory. It was not replaced.");
+      }
+      await log("Checking QEMU, memory, and disk.");
+      const platform = input.platform ?? process.platform;
+      const report = await preflight(this.root, platform);
+      if (!input.qemuSystemPath && (!report.qemu.found || !report.qemu.path)) {
+        throw new RelayError("qemu_missing", report.qemu.detail);
+      }
+      if (!report.memory.ok && !input.acknowledgeLowMemory) {
+        throw new RelayError(
+          "low_memory",
+          `The OS reports ${report.memory.availableBytes} bytes available. Relay asks for ${report.memory.requiredBytes}. Approve low memory to continue. Host settings were not changed.`,
+        );
+      }
+      if (!report.disk.ok) {
+        throw new RelayError(
+          "low_disk",
+          `The OS reports ${report.disk.availableBytes} bytes free. Relay asks for ${report.disk.requiredBytes}. Nothing was downloaded.`,
+        );
+      }
+      const qemuSystem = input.qemuSystemPath ?? report.qemu.path ?? "";
+      const accel = chooseAccel({ platform, kvm: report.virtualization.available, allowSoftwareEmulation: input.allowSoftwareEmulation });
+      await mkdir(dir, { recursive: true });
+      const spec = input.imageSpec ?? ubuntuImageSpec();
+      const baseImage = path.join(dir, spec.fileName);
+      const verified = await downloadVerified({
+        imageUrl: spec.imageUrl,
+        checksumUrl: spec.checksumUrl,
+        fileName: spec.fileName,
+        dest: baseImage,
+        fetchImpl: input.fetchImpl,
+        signal: input.signal,
+        onProgress: (message) => void log(message),
+      });
+      const overlay = path.join(dir, "overlay.qcow2");
+      try {
+        await stat(overlay);
+        throw new RelayError("vm_exists", "overlay.qcow2 already exists. It was not overwritten.");
+      } catch (error) {
+        if (error instanceof RelayError) throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const qemuImg = input.qemuImgPath ?? (await findQemuImg(qemuSystem, platform));
+      if (!qemuImg) {
+        throw new RelayError(
+          "qemu_img_missing",
+          `qemu-img was not found next to ${qemuSystem}. QEMU for Windows includes qemu-img.exe in the same folder. The downloaded image was kept. No overlay was created.`,
+        );
+      }
+      await log(`Creating the overlay disk with ${qemuImg}.`);
+      const exec = input.execFileImpl ?? (async (file: string, args: string[]) => {
+        await run(file, args);
+      });
+      await exec(qemuImg, ["create", "-f", "qcow2", "-F", "qcow2", "-b", baseImage, overlay, "32G"]);
+      await log("Writing the cloud-init seed with Relay's ISO builder. cloud-localds is not used.");
+      const password = randomBytes(12).toString("base64url");
+      const assets = await loadGuestAssets();
+      const userData = cloudInit(password, assets.helper, assets.chrome);
+      const metaData = "instance-id: relay\nlocal-hostname: relay\n";
+      await writeFile(path.join(dir, "user-data"), userData);
+      await writeFile(path.join(dir, "meta-data"), metaData);
+      const seedIso = path.join(dir, "seed.iso");
+      await writeFile(seedIso, buildCidataIso([
+        { name: "user-data", data: Buffer.from(userData, "utf8") },
+        { name: "meta-data", data: Buffer.from(metaData, "utf8") },
+      ]));
+      const qmpSocket = platform === "win32" ? `tcp:127.0.0.1:${await freeTcpPort()}` : path.join(dir, "qmp.sock");
+      const now = new Date().toISOString();
+      await log(`Provision finished. Image SHA256 ${verified.sha256}.`);
+      return {
+        directory: dir,
+        baseImage,
+        overlay,
+        seedIso,
+        sha256: verified.sha256,
+        checksumNote: verified.note,
+        guestUser: "relay",
+        guestPassword: password,
+        createdAt: now,
+        memoryMb: 1536,
+        cpus: 2,
+        accel,
+        qmpSocket,
+        serialLog: path.join(dir, "serial.log"),
+        stderrLog: path.join(dir, "qemu.log"),
+        pidFile: path.join(dir, "qemu.pid"),
+        log: [{ at: now, message: `${verified.reused ? "Reused" : "Downloaded"} ${spec.fileName}. ${verified.note}` }],
+      };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Provision failed.";
+      await log(`ERROR ${message}`);
       if (error instanceof RelayError) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      throw new RelayError("provision", message);
+    } finally {
+      this.busy = false;
     }
-    await run("qemu-img", ["create", "-f", "qcow2", "-F", "qcow2", "-b", baseImage, overlay, "32G"]);
-    const password = randomBytes(12).toString("base64url");
-    const assets = await loadGuestAssets();
-    const userData = cloudInit(password, assets.helper, assets.chrome);
-    const metaData = "instance-id: relay\nlocal-hostname: relay\n";
-    await writeFile(path.join(dir, "user-data"), userData, { mode: 0o600 });
-    await writeFile(path.join(dir, "meta-data"), metaData);
-    const seedIso = path.join(dir, "seed.iso");
-    await run("cloud-localds", [seedIso, path.join(dir, "user-data"), path.join(dir, "meta-data")]);
-    const now = new Date().toISOString();
-    return {
-      directory: dir,
-      baseImage,
-      overlay,
-      seedIso,
-      sha256: verified.sha256,
-      checksumNote: verified.note,
-      guestUser: "relay",
-      guestPassword: password,
-      createdAt: now,
-      memoryMb: 1536,
-      cpus: 2,
-      accel,
-      qmpSocket: path.join(dir, "qmp.sock"),
-      serialLog: path.join(dir, "serial.log"),
-      stderrLog: path.join(dir, "qemu.log"),
-      pidFile: path.join(dir, "qemu.pid"),
-      log: [{ at: now, message: `Downloaded ${spec.fileName}. ${verified.note}` }],
-    };
+  }
+
+  private async note(dir: string, message: string, onProgress?: (message: string) => void): Promise<void> {
+    await mkdir(dir, { recursive: true });
+    await appendFile(path.join(dir, "provision.log"), `${new Date().toISOString()} ${message}\n`);
+    onProgress?.(message);
   }
 
   async start(record: VmRecord): Promise<VmRecord> {
@@ -119,7 +175,7 @@ export class VmManager {
     };
     const args = buildQemuArgs(plan);
     const log = await open(record.stderrLog, "a");
-    const child = spawn(binary, args, { detached: true, stdio: ["ignore", log.fd, log.fd] });
+    const child = spawn(binary, args, { detached: true, windowsHide: true, stdio: ["ignore", log.fd, log.fd] });
     child.unref();
     log.close();
     if (!child.pid) throw new RelayError("qemu_failed", "QEMU did not return a process id. See the QEMU log.");
@@ -186,8 +242,19 @@ export class VmManager {
   }
 }
 
-export async function loadGuestAssets(): Promise<{ helper: string; chrome: string }> {
-  const roots = [process.cwd(), path.resolve(path.dirname(process.argv[1] ?? "."), "..")];
+export function guestAssetRoots(): string[] {
+  const roots = [process.cwd()];
+  if (process.argv[1]) roots.push(path.resolve(path.dirname(process.argv[1]), ".."));
+  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resources) {
+    roots.push(path.join(resources, "app.asar"));
+    roots.push(path.join(resources, "app"));
+    roots.push(resources);
+  }
+  return roots;
+}
+
+export async function loadGuestAssets(roots = guestAssetRoots()): Promise<{ helper: string; chrome: string }> {
   for (const root of roots) {
     try {
       return {
@@ -283,6 +350,13 @@ runcmd:
 `;
 }
 
+async function freeTcpPort(): Promise<number> {
+  for (let port = 46440; port < 46450; port += 1) {
+    if (await portFree(port)) return port;
+  }
+  throw new RelayError("qmp_busy", "No free local port for the QEMU monitor.");
+}
+
 async function freeVncPort(): Promise<number> {
   for (let port = 5901; port < 5910; port += 1) {
     if (await portFree(port)) return port;
@@ -300,7 +374,9 @@ function portFree(port: number): Promise<boolean> {
 
 export function qmp(socketPath: string, execute: string, args?: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
+    const socket = socketPath.startsWith("tcp:")
+      ? net.createConnection({ host: socketPath.slice(4).split(":")[0], port: Number(socketPath.slice(4).split(":")[1]) })
+      : net.createConnection(socketPath);
     let buffer = "";
     const pending: Record<string, unknown>[] = [{ execute: "qmp_capabilities" }, { execute, arguments: args }];
     socket.setTimeout(8000);

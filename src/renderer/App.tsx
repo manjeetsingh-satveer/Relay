@@ -383,6 +383,10 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   const [allowTcg, setAllowTcg] = useState(false);
   const [lowMemory, setLowMemory] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState("");
+  const [provisionLog, setProvisionLog] = useState("");
+  const [provisioning, setProvisioning] = useState(false);
+  const holdingProvision = useRef(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
   const screen = useRef<HTMLDivElement>(null);
   const record = props.boot.vm.record;
   const running = props.boot.vm.process === "running";
@@ -413,13 +417,47 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
     return () => clearInterval(timer);
   }, [record]);
 
+  useEffect(() => {
+    let stop = false;
+    const tick = () => {
+      api.vmLog().then((result) => {
+        if (stop) return;
+        setProvisionLog(result.text);
+        setProvisioning(holdingProvision.current || result.running);
+      }).catch(() => undefined);
+    };
+    tick();
+    const timer = setInterval(tick, provisioning ? 400 : 1500);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [provisioning]);
+
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
       <p style={{ maxWidth: 760 }}>This is a QEMU virtual machine, displayed with noVNC. Sign in to Claude, ChatGPT, Gemini, or Perplexity in the browser on this desktop. Relay does not see or type your password. The browser profile stays on the VM disk. The installer does not contain an Ubuntu image. First run downloads the official Ubuntu 24.04 cloud image and checks its SHA256. GPG verification of that checksum file is not performed.</p>
       <div className="row">
         <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button>
-        {!record ? <Button onClick={() => api.provision({ allowSoftwareEmulation: allowTcg, acknowledgeLowMemory: lowMemory }).then(props.refresh).catch((reason) => props.onError(reason.message))}>Download and provision</Button> : null}
+        {!record ? <Button disabled={provisioning} onClick={() => {
+          if (holdingProvision.current) return;
+          holdingProvision.current = true;
+          setProvisioning(true);
+          setProvisionError(null);
+          api.provision({ allowSoftwareEmulation: allowTcg, acknowledgeLowMemory: lowMemory })
+            .then(() => props.refresh())
+            .catch((reason) => {
+              const message = reason instanceof Error ? reason.message : "Provision failed.";
+              setProvisionError(message);
+              props.onError(message);
+            })
+            .finally(() => {
+              holdingProvision.current = false;
+              api.vmLog().then((result) => setProvisionLog(result.text)).catch(() => undefined);
+              setProvisioning(false);
+            });
+        }}>{provisioning ? "Provisioning…" : "Download and provision"}</Button> : null}
         {record && !running ? <Button onClick={() => api.vmAction("start").then(props.refresh).catch((reason) => props.onError(reason.message))}>Start</Button> : null}
         {running ? <Button variant="outline" onClick={() => api.vmAction("shutdown").then(props.refresh).catch((reason) => props.onError(reason.message))}>Shut down</Button> : null}
         {running ? <Button variant="outline" onClick={() => api.vmAction("pause").catch((reason) => props.onError(reason.message))}>Pause</Button> : null}
@@ -432,6 +470,9 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
           <label className="row"><input type="checkbox" checked={lowMemory} onChange={(event) => setLowMemory(event.target.checked)} /> Continue even if the OS reports less than 1.5 GB available</label>
         </div>
       ) : null}
+      {provisionError ? <p className="card" style={{ marginTop: 12, color: "var(--destructive)" }}>{provisionError}</p> : null}
+      {provisioning ? <p style={{ marginTop: 12 }}>Provision is running. This log is written to the vm folder as provision.log.</p> : null}
+      {provisionLog ? <pre className="card" style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{provisionLog}</pre> : null}
       {report ? (
         <div className="card" style={{ marginTop: 12 }}>
           <p>{report.qemu.detail}</p>

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { isRelayError, RelayError } from "../core/errors.ts";
 import { Coordinator } from "../core/coordinator.ts";
@@ -342,9 +342,21 @@ export async function startServer(options: {
       });
     }
     if (method === "GET" && url.pathname === "/api/vm") return send(response, 200, await vmState());
+    if (method === "GET" && url.pathname === "/api/vm/log") {
+      let text = "";
+      try {
+        text = await readFile(path.join(options.dataDir, "vm", "provision.log"), "utf8");
+      } catch {
+        text = "";
+      }
+      return send(response, 200, { text: text.slice(-20000), running: vm.isProvisioning() });
+    }
     if (method === "POST" && url.pathname === "/api/vm/preflight") return send(response, 200, await preflight(options.dataDir));
     if (method === "POST" && url.pathname === "/api/vm/provision") {
       const body = await json(request);
+      if (vm.isProvisioning()) {
+        throw new RelayError("busy", "A provision is already running. Its log is on this page. Nothing else was started.", 409);
+      }
       const record = await vm.provision({
         record: store.data.vm,
         allowSoftwareEmulation: body.allowSoftwareEmulation === true,
