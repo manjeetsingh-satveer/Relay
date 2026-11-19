@@ -288,6 +288,9 @@ packages:
   - xfce4-terminal
   - xorg
   - xinit
+  - lightdm
+  - lightdm-gtk-greeter
+  - socat
   - dbus-x11
   - fonts-dejavu-core
   - python3
@@ -295,6 +298,7 @@ write_files:
   - path: /home/relay/.xinitrc
     owner: relay:relay
     permissions: "0755"
+    defer: true
     content: |
       exec startxfce4
   - path: /opt/relay/relay-helper.b64
@@ -303,19 +307,40 @@ write_files:
   - path: /opt/relay/relay-chrome.b64
     content: ${chromeB64}
     permissions: "0644"
-  - path: /etc/systemd/system/relay-desktop.service
+  - path: /etc/lightdm/lightdm.conf.d/50-relay-autologin.conf
+    content: |
+      [Seat:*]
+      autologin-user=relay
+      autologin-user-timeout=0
+      autologin-session=xfce
+      user-session=xfce
+  - path: /etc/systemd/system/relay-cdp-proxy.service
     content: |
       [Unit]
-      Description=Relay guest desktop
-      After=multi-user.target
+      Description=Relay Chromium debug port forwarder
+      After=network.target
       [Service]
-      User=relay
-      WorkingDirectory=/home/relay
-      ExecStart=/usr/bin/startx -- :0 vt1
-      Restart=on-failure
-      RestartSec=5
+      ExecStart=/usr/bin/socat TCP-LISTEN:9222,fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:9223
+      Restart=always
+      RestartSec=2
       [Install]
       WantedBy=multi-user.target
+  - path: /home/relay/.config/autostart/light-locker.desktop
+    owner: relay:relay
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=light-locker
+      Hidden=true
+  - path: /home/relay/.config/autostart/xfce4-screensaver.desktop
+    owner: relay:relay
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=xfce4-screensaver
+      Hidden=true
   - path: /etc/systemd/system/relay-helper.service
     content: |
       [Unit]
@@ -328,22 +353,26 @@ write_files:
       WantedBy=multi-user.target
   - path: /home/relay/.config/autostart/relay-chrome.desktop
     owner: relay:relay
+    defer: true
     content: |
       [Desktop Entry]
       Type=Application
       Name=Relay Chrome
       Exec=/usr/local/bin/relay-chrome
 runcmd:
-  - mkdir -p /opt/relay /usr/local/bin /home/relay/.config/relay-chrome
+  - mkdir -p /opt/relay /usr/local/bin /home/relay/relay-chrome-profile
   - base64 -d /opt/relay/relay-helper.b64 > /opt/relay/relay-helper.py
   - base64 -d /opt/relay/relay-chrome.b64 > /usr/local/bin/relay-chrome
   - chmod 755 /opt/relay/relay-helper.py /usr/local/bin/relay-chrome
-  - chown -R relay:relay /home/relay/.config
+  - chown -R relay:relay /home/relay/.config /home/relay/relay-chrome-profile
   - apt-get install -y chromium || apt-get install -y chromium-browser || true
   - systemctl daemon-reload
-  - systemctl enable relay-desktop.service relay-helper.service
-  - systemctl start relay-desktop.service || true
+  - systemctl enable relay-helper.service relay-cdp-proxy.service
   - systemctl start relay-helper.service || true
+  - systemctl start relay-cdp-proxy.service || true
+  - systemctl set-default graphical.target
+  - systemctl enable lightdm.service
+  - systemctl restart lightdm.service || true
 `;
 }
 

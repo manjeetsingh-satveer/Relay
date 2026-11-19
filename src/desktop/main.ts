@@ -37,7 +37,10 @@ app.whenReady().then(async () => {
     title: "Relay",
     backgroundColor: "#12110e",
   });
-  await window.loadURL(`http://127.0.0.1:${server.port}/`);
+  // Open straight into the Linux desktop: boot the provisioned VM in the background
+  // and land on the Computer tab. If no VM exists yet, or it is already running, this is a no-op.
+  void fetch(`http://127.0.0.1:${server.port}/api/vm/start`, { method: "POST" }).catch(() => undefined);
+  await window.loadURL(`http://127.0.0.1:${server.port}/#computer`);
   window.on("closed", () => undefined);
 });
 
