@@ -17,8 +17,8 @@ export async function probeCdp(url: string, fetchImpl: typeof fetch = fetch): Pr
 export async function openLoginPage(cdpUrl: string, site: SiteDefinition): Promise<string> {
   const browser = await connect(cdpUrl);
   try {
-    const page = await browser.newPage();
-    await page.goto(site.homeUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    const page = await openPage(browser, site);
+    void page;
     return `Opened ${site.homeUrl} in the VM browser. Sign in there, including MFA or a human check. Relay will not type your password.`;
   } finally {
     await browser.close().catch(() => undefined);
@@ -54,28 +54,56 @@ export async function runWebTask(input: {
   }
 }
 
+/** Removes terminal colour codes and Playwright's call log so errors read cleanly in the chat. */
+export function cleanError(message: string): string {
+  return message
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\[[0-9;]*m/g, "")
+    .split(/\r?\n?Call log:/)[0]!
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function connect(cdpUrl: string): Promise<Browser> {
+  // The VM is small, so Chromium can be slow to answer while it is busy. Retry before giving up.
+  let last = "connect failed";
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await chromium.connectOverCDP(cdpUrl, { timeout: 45000 });
+    } catch (error) {
+      last = cleanError(error instanceof Error ? error.message : "connect failed");
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
+  }
+  throw new RelayError(
+    "vm-browser",
+    `The browser inside the VM did not answer at ${cdpUrl} after 3 tries. Make sure the VM is running and Chromium is open in the Computer tab. (${last})`,
+  );
+}
+
+function sameSite(page: Page, site: SiteDefinition): boolean {
   try {
-    return await chromium.connectOverCDP(cdpUrl);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "connect failed";
-    throw new RelayError(
-      "vm-browser",
-      `The browser inside the VM is not reachable at ${cdpUrl}. Start the VM from the Computer tab and wait until Chromium is open. ${message}`,
-    );
+    return new URL(page.url()).hostname === new URL(site.homeUrl).hostname;
+  } catch {
+    return false;
+  }
+}
+
+/** Closes extra tabs for this site so they do not pile up and slow the VM. Keeps `keep`. */
+async function closeDuplicates(pages: Page[], site: SiteDefinition, keep: Page): Promise<void> {
+  for (const page of pages) {
+    if (page !== keep && sameSite(page, site)) await page.close().catch(() => undefined);
   }
 }
 
 async function openPage(browser: Browser, site: SiteDefinition, continuedUrl?: string): Promise<Page> {
   const context = browser.contexts()[0] ?? await browser.newContext();
-  if (continuedUrl) {
-    const existing = context.pages().find((page) => page.url() === continuedUrl);
-    if (existing) return existing;
-    const page = await context.newPage();
-    await page.goto(continuedUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    return page;
-  }
-  const page = await context.newPage();
-  await page.goto(site.homeUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  const pages = context.pages();
+  const target = continuedUrl ?? site.homeUrl;
+  // Reuse one tab per site instead of opening a new tab for every message.
+  const page = pages.find((item) => item.url() === target) ?? pages.find((item) => sameSite(item, site)) ?? await context.newPage();
+  await closeDuplicates(pages, site, page);
+  if (page.url() !== target) await page.goto(target, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.bringToFront().catch(() => undefined);
   return page;
 }

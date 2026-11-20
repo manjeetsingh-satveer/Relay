@@ -3,7 +3,7 @@ import path from "node:path";
 import type { AdapterRuntime, ExecuteResult } from "../adapters/execute.ts";
 import { EXECUTORS } from "../adapters/execute.ts";
 import { adapterMeta } from "../adapters/catalog.ts";
-import { runWebTask } from "../browser/cdp.ts";
+import { cleanError, runWebTask } from "../browser/cdp.ts";
 import { runGuestCli } from "../browser/guest-cli.ts";
 import { requestJson } from "../adapters/http.ts";
 import { mediaTypeFor, safeArtifactName } from "./artifacts.ts";
@@ -233,7 +233,7 @@ export class Coordinator {
       await this.finish(taskId, "completed");
     } catch (error) {
       const cancelled = controller.signal.aborted || (isRelayError(error) && error.code === "cancelled");
-      const message = error instanceof Error ? error.message : "Task failed";
+      const message = cleanError(error instanceof Error ? error.message : "Task failed");
       await this.finish(taskId, cancelled ? "cancelled" : "failed", message);
     } finally {
       this.aborts.delete(taskId);
@@ -317,7 +317,7 @@ export class Coordinator {
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Provider call failed";
+      const message = cleanError(error instanceof Error ? error.message : "Provider call failed");
       await this.recordAttempt(view.id, false, message);
       throw error;
     }
