@@ -26,6 +26,17 @@ describe("local router", () => {
     expect(() => routeLocal({ prompt: "Hello", mode: "single", available: [], allowSameAgentReview: false })).toThrow(/Nothing was sent/);
   });
 
+  it("lists the other ready agents as escalation fallbacks, best first", () => {
+    const decision = routeLocal({
+      prompt: "Hello",
+      mode: "single",
+      available: [view({ id: "grok-web", credential: "browser" }), view({ id: "claude-web", credential: "browser" }), view({ id: "chatgpt-web", credential: "browser" })],
+      allowSameAgentReview: false,
+    });
+    expect(decision.steps[0]?.adapterId).toBe("claude-web");
+    expect(decision.fallbacks).toEqual(["chatgpt-web", "grok-web"]);
+  });
+
   it("prefers a signed-in website over an API adapter", () => {
     const decision = routeLocal({
       prompt: "Hello",

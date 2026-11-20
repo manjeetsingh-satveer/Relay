@@ -9,6 +9,8 @@ export interface RouteChoice {
 export interface RouteDecision {
   explanation: string;
   steps: RouteChoice[];
+  /** Other ready agents, best first. A failed draft or single step escalates to these in order. */
+  fallbacks?: IntegrationId[];
   source: "you" | "local-rules" | "drex" | "drex-fallback";
 }
 
@@ -65,11 +67,13 @@ function finish(input: { mode: "single" | "collaborative"; allowSameAgentReview:
   if (!primary) {
     throw new RelayError("no_agent", "No web app is reachable. Start the Linux VM from the Computer tab and sign in there. Nothing was sent.");
   }
+  const fallbacks = ranked.slice(1).map((item) => item.id);
   if (input.mode === "single") {
     return {
       source: "local-rules",
       explanation: `${explanation} ${primary.displayName} will handle it.`,
       steps: [{ adapterId: primary.id, role: "single" }],
+      fallbacks,
     };
   }
   const reviewer = ranked.find((item) => item.id !== primary.id && item.capabilities.review);

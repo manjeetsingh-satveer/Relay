@@ -41,6 +41,15 @@ export async function startServer(options: {
   const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
   const store = await Store.open(options.dataDir);
+  // Give every install a ready-to-use "General" chat so people can type without creating a project.
+  if (store.data.projects.length === 0) {
+    const now = new Date().toISOString();
+    const general = { id: createId(), name: "General", repoUrl: undefined, createdAt: now };
+    await store.update((data) => {
+      data.projects.push(general);
+      data.conversations.push({ id: createId(), projectId: general.id, title: "General", createdAt: now, updatedAt: now, sessions: {} });
+    });
+  }
   const listeners = new Set<ServerResponse>();
   const notify = () => {
     for (const response of listeners) {

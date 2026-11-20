@@ -199,7 +199,34 @@ export class Coordinator {
         calls += 1;
         const view = views.find((item) => item.id === step.adapterId);
         if (!view) throw new RelayError("agent_unavailable", `${step.adapterId} disappeared before the call.`);
-        const result = await this.one(taskId, view, input, step.role, draft, review, controller.signal);
+        let result: ExecuteResult;
+        try {
+          result = await this.one(taskId, view, input, step.role, draft, review, controller.signal);
+        } catch (error) {
+          // Escalate: if this agent fails (not signed in, usage cap, timeout...), hand the same step
+          // to the next ready agent instead of giving up. Cancels and limits still stop the task.
+          const escalatable = step.role === "single" || step.role === "draft";
+          if (!escalatable || controller.signal.aborted || (isRelayError(error) && (error.code === "cancelled" || error.code === "limit"))) throw error;
+          let lastError = error;
+          let done: ExecuteResult | null = null;
+          for (const nextId of decision.fallbacks ?? []) {
+            const next = views.find((item) => item.id === nextId);
+            if (!next || next.id === view.id) continue;
+            const reason = lastError instanceof Error ? lastError.message : "failed";
+            await this.progress(taskId, `Escalating: the previous agent could not finish (${reason}). Trying ${next.displayName}.`);
+            budget();
+            calls += 1;
+            try {
+              done = await this.one(taskId, next, input, step.role, draft, review, controller.signal);
+              break;
+            } catch (nextError) {
+              if (controller.signal.aborted) throw nextError;
+              lastError = nextError;
+            }
+          }
+          if (!done) throw lastError;
+          result = done;
+        }
         if (step.role === "draft" || step.role === "single" || step.role === "revision") draft = result.text;
         if (step.role === "review") review = result.text;
       }
