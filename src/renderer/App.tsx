@@ -393,20 +393,30 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
 
   useEffect(() => {
     if (!running) return;
-    let rfb: { disconnect: () => void; scaleViewport: boolean; focusOnClick: boolean } | null = null;
+    let rfb: { disconnect: () => void; scaleViewport: boolean; focusOnClick: boolean; addEventListener: (type: string, fn: () => void) => void } | null = null;
     let cancelled = false;
-    (async () => {
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // Reconnect whenever the VNC link drops (VM still booting, restart, proxy hiccup),
+    // otherwise the canvas stays black until the app is reopened.
+    const connect = async () => {
       const mod = await import("@novnc/novnc");
       if (cancelled || !screen.current) return;
       const RFB = mod.default;
       const protocol = location.protocol === "https:" ? "wss" : "ws";
-      const client = new RFB(screen.current, `${protocol}://${location.host}/vm/vnc`);
+      screen.current.replaceChildren();
+      const client = new RFB(screen.current, `${protocol}://${location.host}/vm/vnc`) as unknown as NonNullable<typeof rfb>;
       client.scaleViewport = true;
       client.focusOnClick = true;
+      client.addEventListener("disconnect", () => {
+        if (cancelled) return;
+        retry = setTimeout(() => void connect().catch(() => undefined), 2000);
+      });
       rfb = client;
-    })().catch((reason) => props.onError(reason instanceof Error ? reason.message : "noVNC failed to load."));
+    };
+    connect().catch((reason) => props.onError(reason instanceof Error ? reason.message : "noVNC failed to load."));
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
       rfb?.disconnect();
     };
   }, [running]);

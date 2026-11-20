@@ -155,7 +155,8 @@ export interface QemuPlan {
 export function buildQemuArgs(plan: QemuPlan): string[] {
   const display = plan.vncPort - 5900;
   if (display < 0 || display > 99) throw new Error("VNC port must be between 5900 and 5999.");
-  const cpu = plan.accel === "kvm" ? "host" : "qemu64";
+  // qemu64 lacks SSE4.2/POPCNT, which Bun-based CLIs (Claude Code) require.
+  const cpu = plan.accel === "kvm" ? "host" : "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt";
   const args = [
     "-machine", "q35",
     "-accel", plan.accel,

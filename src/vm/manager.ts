@@ -291,6 +291,8 @@ packages:
   - lightdm
   - lightdm-gtk-greeter
   - socat
+  - curl
+  - git
   - dbus-x11
   - fonts-dejavu-core
   - python3
@@ -325,6 +327,14 @@ write_files:
       RestartSec=2
       [Install]
       WantedBy=multi-user.target
+  - path: /home/relay/.config/autostart/relay-noblank.desktop
+    owner: relay:relay
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Relay keep display on
+      Exec=sh -c "xset s off; xset s noblank; xset -dpms"
   - path: /home/relay/.config/autostart/light-locker.desktop
     owner: relay:relay
     defer: true
@@ -341,12 +351,132 @@ write_files:
       Type=Application
       Name=xfce4-screensaver
       Hidden=true
+  - path: /usr/local/bin/relay-open
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Opens a site as an app window in the running Relay Chromium (same profile and sign-ins).
+      PATH="$PATH:/snap/bin"
+      for bin in chromium chromium-browser; do
+        command -v "$bin" >/dev/null 2>&1 && exec "$bin" --user-data-dir="$HOME/relay-chrome-profile" --app="$1"
+      done
+  - path: /opt/relay/install-ai-clis.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Installs AI command-line tools for the relay user from their official installers.
+      # Each one is optional: a failure is logged and the rest still install.
+      set -u
+      export HOME=/home/relay PATH="/home/relay/.local/bin:/home/relay/.npm-global/bin:/usr/bin:/bin"
+      cd "$HOME"
+      npm config set prefix "$HOME/.npm-global"
+      curl -fsSL https://claude.ai/install.sh | bash || npm install -g @anthropic-ai/claude-code || echo "relay: Claude Code install failed"
+      curl -fsS https://cursor.com/install | bash || echo "relay: Cursor CLI install failed"
+      npm install -g @google/gemini-cli || echo "relay: Gemini CLI install failed"
+      npm install -g @openai/codex || echo "relay: Codex CLI install failed"
+      npm install -g @github/copilot || echo "relay: GitHub Copilot CLI install failed"
+      grep -q relay-path "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH" # relay-path' >> "$HOME/.bashrc"
+  - path: /home/relay/Desktop/relay-chatgpt.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=ChatGPT
+      Comment=ChatGPT in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://chatgpt.com/
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-claude.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Claude
+      Comment=Claude in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://claude.ai/
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-gemini.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Gemini
+      Comment=Gemini in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://gemini.google.com/
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-grok.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Grok
+      Comment=Grok in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://grok.com/
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-perplexity.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Perplexity
+      Comment=Perplexity in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://www.perplexity.ai/
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-cursor-web.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Cursor (web)
+      Comment=Cursor (web) in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://cursor.com/agents
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
+  - path: /home/relay/Desktop/relay-copilot.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=GitHub Copilot
+      Comment=GitHub Copilot in Relay's Chromium (shares its sign-ins)
+      Exec=/usr/local/bin/relay-open https://github.com/copilot
+      Icon=web-browser
+      Terminal=false
+      Categories=Network;
   - path: /etc/systemd/system/relay-helper.service
     content: |
       [Unit]
       Description=Relay guest CLI helper
       After=network.target
       [Service]
+      User=relay
+      WorkingDirectory=/home/relay
+      Environment=HOME=/home/relay
+      Environment=PATH=/home/relay/.local/bin:/home/relay/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:/snap/bin
       ExecStart=/usr/bin/python3 /opt/relay/relay-helper.py
       Restart=on-failure
       [Install]
@@ -367,6 +497,8 @@ runcmd:
   - chown -R relay:relay /home/relay/.config /home/relay/relay-chrome-profile
   - apt-get install -y chromium || apt-get install -y chromium-browser || true
   - systemctl daemon-reload
+  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs || echo "relay - Node.js 22 install failed"
+  - su - relay -c /opt/relay/install-ai-clis.sh
   - systemctl enable relay-helper.service relay-cdp-proxy.service
   - systemctl start relay-helper.service || true
   - systemctl start relay-cdp-proxy.service || true
