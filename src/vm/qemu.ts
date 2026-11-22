@@ -166,6 +166,10 @@ export function buildQemuArgs(plan: QemuPlan): string[] {
     "-name", "relay",
     "-nodefaults",
     "-vga", "std",
+    // Absolute pointer: without a USB tablet the guest uses a relative PS/2 mouse and the
+    // cursor drifts away from where noVNC clicks.
+    "-device", "qemu-xhci,id=xhci",
+    "-device", "usb-tablet,bus=xhci.0",
     "-drive", `if=virtio,format=qcow2,file=${plan.overlay}`,
     "-drive", `if=virtio,format=raw,file=${plan.seedIso},media=cdrom,read-only=on`,
     "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:9222-:9222,hostfwd=tcp:127.0.0.1:43125-:43125",

@@ -103,7 +103,7 @@ export class VmManager {
       await log("Writing the cloud-init seed with Relay's ISO builder. cloud-localds is not used.");
       const password = randomBytes(12).toString("base64url");
       const assets = await loadGuestAssets();
-      const userData = cloudInit(password, assets.helper, assets.chrome);
+      const userData = cloudInit(password, assets.helper, assets.chrome, assets.grokBot);
       const metaData = "instance-id: relay\nlocal-hostname: relay\n";
       await writeFile(path.join(dir, "user-data"), userData);
       await writeFile(path.join(dir, "meta-data"), metaData);
@@ -251,12 +251,13 @@ export function guestAssetRoots(): string[] {
   return roots;
 }
 
-export async function loadGuestAssets(roots = guestAssetRoots()): Promise<{ helper: string; chrome: string }> {
+export async function loadGuestAssets(roots = guestAssetRoots()): Promise<{ helper: string; chrome: string; grokBot: string }> {
   for (const root of roots) {
     try {
       return {
         helper: await readFile(path.join(root, "guest/relay-helper.py"), "utf8"),
         chrome: await readFile(path.join(root, "guest/relay-chrome.sh"), "utf8"),
+        grokBot: await readFile(path.join(root, "guest/relay-install-grok-bot.sh"), "utf8"),
       };
     } catch {
       continue;
@@ -265,7 +266,8 @@ export async function loadGuestAssets(roots = guestAssetRoots()): Promise<{ help
   throw new RelayError("guest-files", "Could not read guest/relay-helper.py. The VM was not provisioned.");
 }
 
-export function cloudInit(password: string, helper: string, chrome: string): string {
+export function cloudInit(password: string, helper: string, chrome: string, grokBot = ""): string {
+  const grokBotB64 = Buffer.from(grokBot, "utf8").toString("base64");
   const helperB64 = Buffer.from(helper, "utf8").toString("base64");
   const chromeB64 = Buffer.from(chrome, "utf8").toString("base64");
   return `#cloud-config
@@ -306,6 +308,22 @@ write_files:
   - path: /opt/relay/relay-helper.b64
     content: ${helperB64}
     permissions: "0644"
+  - path: /opt/relay/relay-install-grok-bot.b64
+    content: ${grokBotB64}
+    permissions: "0644"
+  - path: /home/relay/Desktop/relay-grok-bot.desktop
+    owner: relay:relay
+    permissions: "0755"
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Install Grok Bot
+      Comment=Opens the Grok Bot download page, then installs the Linux .deb you download
+      Exec=/usr/local/bin/relay-install-grok-bot
+      Icon=system-software-install
+      Terminal=false
+      Categories=Network;
   - path: /opt/relay/relay-chrome.b64
     content: ${chromeB64}
     permissions: "0644"
@@ -335,6 +353,23 @@ write_files:
       Type=Application
       Name=Relay keep display on
       Exec=sh -c "xset s off; xset s noblank; xset -dpms"
+  - path: /usr/local/bin/relay-trust-icons
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Marks Relay's own desktop launchers as trusted so XFCE does not ask on first click.
+      for f in "$HOME"/Desktop/relay-*.desktop; do
+        [ -f "$f" ] || continue
+        gio set "$f" metadata::xfce-exe-checksum "$(sha256sum "$f" | cut -d' ' -f1)" 2>/dev/null || true
+      done
+  - path: /home/relay/.config/autostart/relay-trust-icons.desktop
+    owner: relay:relay
+    defer: true
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=Relay trust desktop icons
+      Exec=/usr/local/bin/relay-trust-icons
   - path: /home/relay/.config/autostart/light-locker.desktop
     owner: relay:relay
     defer: true
@@ -493,7 +528,8 @@ runcmd:
   - mkdir -p /opt/relay /usr/local/bin /home/relay/relay-chrome-profile
   - base64 -d /opt/relay/relay-helper.b64 > /opt/relay/relay-helper.py
   - base64 -d /opt/relay/relay-chrome.b64 > /usr/local/bin/relay-chrome
-  - chmod 755 /opt/relay/relay-helper.py /usr/local/bin/relay-chrome
+  - base64 -d /opt/relay/relay-install-grok-bot.b64 > /usr/local/bin/relay-install-grok-bot
+  - chmod 755 /opt/relay/relay-helper.py /usr/local/bin/relay-chrome /usr/local/bin/relay-install-grok-bot
   - chown -R relay:relay /home/relay/.config /home/relay/relay-chrome-profile
   - apt-get install -y chromium || apt-get install -y chromium-browser || true
   - systemctl daemon-reload

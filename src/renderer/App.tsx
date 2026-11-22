@@ -377,17 +377,18 @@ function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<
 
 function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onError: (message: string) => void }) {
   const [report, setReport] = useState<VmView["preflight"]>();
-  const [serial, setSerial] = useState("");
   const [share, setShare] = useState("");
   const [writable, setWritable] = useState(false);
   const [allowTcg, setAllowTcg] = useState(false);
   const [lowMemory, setLowMemory] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState("");
   const [provisionLog, setProvisionLog] = useState("");
   const [provisioning, setProvisioning] = useState(false);
   const holdingProvision = useRef(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const screen = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const viewer = useRef<{ focus: () => void } | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const record = props.boot.vm.record;
   const running = props.boot.vm.process === "running";
 
@@ -412,6 +413,8 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
         retry = setTimeout(() => void connect().catch(() => undefined), 2000);
       });
       rfb = client;
+      viewer.current = client as unknown as { focus: () => void };
+      viewer.current.focus();
     };
     connect().catch((reason) => props.onError(reason instanceof Error ? reason.message : "noVNC failed to load."));
     return () => {
@@ -422,10 +425,14 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   }, [running]);
 
   useEffect(() => {
-    if (!record) return;
-    const timer = setInterval(() => api.serial().then((result) => setSerial(result.text)).catch(() => undefined), 3000);
-    return () => clearInterval(timer);
-  }, [record]);
+    const onChange = () => {
+      setFullscreen(document.fullscreenElement === frame.current);
+      // Give the keyboard to the VM again after entering or leaving full screen.
+      setTimeout(() => viewer.current?.focus(), 50);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   useEffect(() => {
     let stop = false;
@@ -447,7 +454,7 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
-      <p style={{ maxWidth: 760 }}>This is a QEMU virtual machine, displayed with noVNC. Sign in to Claude, ChatGPT, Gemini, or Perplexity in the browser on this desktop. Relay does not see or type your password. The browser profile stays on the VM disk. The installer does not contain an Ubuntu image. First run downloads the official Ubuntu 24.04 cloud image and checks its SHA256. GPG verification of that checksum file is not performed.</p>
+      <p style={{ maxWidth: 760 }}>Your private Linux desktop. Sign in to each AI app here; Relay never sees or types your passwords.</p>
       <div className="row">
         <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button>
         {!record ? <Button disabled={provisioning} onClick={() => {
@@ -472,6 +479,7 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
         {running ? <Button variant="outline" onClick={() => api.vmAction("shutdown").then(props.refresh).catch((reason) => props.onError(reason.message))}>Shut down</Button> : null}
         {running ? <Button variant="outline" onClick={() => api.vmAction("pause").catch((reason) => props.onError(reason.message))}>Pause</Button> : null}
         {record ? <Button variant="outline" onClick={() => api.vmAction("resume").then(props.refresh).catch((reason) => props.onError(reason.message))}>Resume</Button> : null}
+        {running ? <Button onClick={() => frame.current?.requestFullscreen().catch((reason) => props.onError(reason instanceof Error ? reason.message : "Full screen failed."))}>Full screen</Button> : null}
         {running ? <Button variant="danger" onClick={() => api.vmAction("force-stop").then(props.refresh).catch((reason) => props.onError(reason.message))}>Force stop</Button> : null}
       </div>
       {!record ? (
@@ -481,8 +489,13 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
         </div>
       ) : null}
       {provisionError ? <p className="card" style={{ marginTop: 12, color: "var(--destructive)" }}>{provisionError}</p> : null}
-      {provisioning ? <p style={{ marginTop: 12 }}>Provision is running. This log is written to the vm folder as provision.log.</p> : null}
-      {provisionLog ? <pre className="card" style={{ marginTop: 12, whiteSpace: "pre-wrap" }}>{provisionLog}</pre> : null}
+      {provisioning ? <p style={{ marginTop: 12 }}>Setting up the VM. This takes about 10 minutes.</p> : null}
+      {provisionLog && (provisioning || !record) ? (
+        <details className="card" style={{ marginTop: 12 }} open={provisioning}>
+          <summary>Setup log</summary>
+          <pre style={{ whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto" }}>{provisionLog}</pre>
+        </details>
+      ) : null}
       {report ? (
         <div className="card" style={{ marginTop: 12 }}>
           <p>{report.qemu.detail}</p>
@@ -492,16 +505,17 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
           {report.notes.map((note) => <p key={note}>{note}</p>)}
         </div>
       ) : null}
+      <div
+        ref={frame}
+        style={fullscreen ? { background: "#000", width: "100vw", height: "100vh" } : { marginTop: 12 }}
+        onMouseEnter={() => viewer.current?.focus()}
+      >
+        <div id="screen" ref={screen} style={fullscreen ? { width: "100%", height: "100%" } : undefined} />
+      </div>
+      {running ? <p>Click the display to use the mouse and keyboard. Press Esc to leave full screen.</p> : <p>The display stays blank until the VM is running.</p>}
       {record ? (
-        <div className="card" style={{ marginTop: 12 }}>
-          <p>Guest user <code>relay</code>. Local password: <code>{record.guestPassword}</code></p>
-          <p>{record.checksumNote}</p>
-          <p>Process: {props.boot.vm.process}. Accel: {record.accel}. VNC: {record.vncPort ? `127.0.0.1:${record.vncPort}` : "not started"}.</p>
-          {record.log.map((line, index) => <p key={index}>{formatWhen(line.at)} — {line.message}</p>)}
-        </div>
+        <p style={{ marginTop: 12, color: "var(--muted-foreground)", fontSize: 13 }}>VM user <code>relay</code>, password <code>{record.guestPassword}</code> (only needed for sudo prompts). Status: {props.boot.vm.process}, {record.accel}.</p>
       ) : null}
-      <div id="screen" ref={screen} style={{ marginTop: 12 }} />
-      {running ? <p>Click the display to type. Mouse and keyboard go to the guest through noVNC.</p> : <p>The display stays blank until the VM process is running.</p>}
       {record ? (
         <form className="card" style={{ marginTop: 12 }} onSubmit={(event) => { event.preventDefault(); api.share(share, writable).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>
           <Label>Share one host folder</Label>
@@ -510,14 +524,6 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
           <Button type="submit" size="sm">Attach on next start</Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => api.unshare().then(props.refresh)}>Stop sharing</Button>
           <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Nothing else on the host is mounted. Inside the guest, after the next boot: <code>sudo mkdir -p /mnt/host && sudo mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host</code></p>
-        </form>
-      ) : null}
-      {serial ? <pre className="card" style={{ whiteSpace: "pre-wrap" }}>{serial}</pre> : null}
-      {record ? (
-        <form className="card" onSubmit={(event) => { event.preventDefault(); api.deleteVm(confirmDelete).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>
-          <Label>Delete this Relay VM</Label>
-          <Input value={confirmDelete} onChange={(event) => setConfirmDelete(event.target.value)} placeholder="delete this vm" />
-          <Button type="submit" variant="danger" size="sm">Delete Relay's VM directory</Button>
         </form>
       ) : null}
     </div>

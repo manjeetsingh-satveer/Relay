@@ -67,9 +67,9 @@ export async function downloadVerified(input: {
     transform(chunk: Buffer, _encoding, callback) {
       hash.update(chunk);
       bytes += chunk.length;
-      if (bytes - reported >= 8 * 1024 * 1024) {
+      if (bytes - reported >= 100 * 1024 * 1024) {
         reported = bytes;
-        noteProgress(`Downloaded ${bytes} bytes of ${input.fileName}.`);
+        noteProgress(`Downloaded ${Math.round(bytes / 1048576)} MB of ${input.fileName}.`);
       }
       callback(null, chunk);
     },
