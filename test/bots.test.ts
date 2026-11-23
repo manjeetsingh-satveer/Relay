@@ -113,3 +113,15 @@ describe("bot routes", () => {
     }
   });
 });
+
+describe("mentions", () => {
+  const make = (name: string): Bot => ({ ...bot(null), id: name, name });
+  const all = [make("Relay-Claude"), make("Relay-ClaudeCode"), make("Relay-GrokBot")];
+  it("finds mentioned bots in order, without confusing similar names", async () => {
+    const { findMentions } = await import("../src/core/bots.ts");
+    expect(findMentions("@Relay-GrokBot draft it, then @relay-claude review", all).map((item) => item.name)).toEqual(["Relay-GrokBot", "Relay-Claude"]);
+    expect(findMentions("@Relay-ClaudeCode fix it", all).map((item) => item.name)).toEqual(["Relay-ClaudeCode"]);
+    expect(findMentions("email me at a@Relay-Claude.com", all)).toEqual([]);
+    expect(findMentions("@all go", all)).toHaveLength(3);
+  });
+});

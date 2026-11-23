@@ -98,7 +98,8 @@ describe("http api", () => {
     const dumped = JSON.stringify(integrations);
     expect(dumped).not.toContain("sk-test-openai");
     const grok = integrations.find((item: { id: string }) => item.id === "grok-bot");
-    expect(grok.support).toBe("unsupported");
+    expect(grok.support).toBe("supported");
+    expect(grok.availableForRouting).toBe(false); // the app is not open in tests
     await server.close();
   });
 

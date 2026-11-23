@@ -9,7 +9,7 @@ DOWNLOADS="$HOME/Downloads"
 mkdir -p "$DOWNLOADS"
 if command -v grok-bot >/dev/null 2>&1; then
   notify-send "Grok Bot" "Grok Bot is already installed." 2>/dev/null || true
-  exec grok-bot
+  exec /usr/local/bin/relay-grok-bot
 fi
 find_deb() { ls -t "$DOWNLOADS"/*rok*bot*.deb "$DOWNLOADS"/*rok-bot*.deb 2>/dev/null | head -n 1; }
 DEB="$(find_deb || true)"
@@ -37,5 +37,7 @@ if [ -z "$DEB" ]; then
   exit 1
 fi
 sleep 3
+sudo apt-get update -qq || true
 sudo apt-get install -y "$DEB"
 notify-send "Grok Bot" "Installed. Open it from Applications or the desktop icon." 2>/dev/null || true
+exec /usr/local/bin/relay-grok-bot

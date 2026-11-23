@@ -15,10 +15,11 @@ export async function probeCdp(url: string, fetchImpl: typeof fetch = fetch): Pr
 }
 
 export async function openLoginPage(cdpUrl: string, site: SiteDefinition): Promise<string> {
-  const browser = await connect(cdpUrl);
+  const browser = await connect(site.cdpUrl ?? cdpUrl);
   try {
     const page = await openPage(browser, site);
     void page;
+    if (site.desktopApp) return "Brought Grok Bot to the front of your cloud desktop. Sign in there yourself. Relay will not type your password.";
     return `Opened ${site.homeUrl} in the VM browser. Sign in there, including MFA or a human check. Relay will not type your password.`;
   } finally {
     await browser.close().catch(() => undefined);
@@ -35,7 +36,7 @@ export async function runWebTask(input: {
 }): Promise<ExecuteResult> {
   const site = siteById(input.siteId);
   if (!site) throw new RelayError("unsupported", "That site has no web adapter.");
-  const browser = await connect(input.cdpUrl);
+  const browser = await connect(site.cdpUrl ?? input.cdpUrl);
   try {
     const page = await openPage(browser, site, input.continuedUrl);
     const driven = await driveChat(page, site, { prompt: input.prompt, timeoutMs: input.timeoutMs, signal: input.signal });
@@ -99,13 +100,19 @@ async function closeDuplicates(pages: Page[], site: SiteDefinition, keep: Page):
 async function openPage(browser: Browser, site: SiteDefinition, continuedUrl?: string): Promise<Page> {
   const context = browser.contexts()[0] ?? await browser.newContext();
   const pages = context.pages();
+  if (site.desktopApp) {
+    const main = pages.find((item) => !item.url().startsWith("devtools://")) ?? pages[0];
+    if (!main) throw new RelayError("not_installed", `${site.label} has no open window. Open it from the desktop icon.`);
+    await main.bringToFront().catch(() => undefined);
+    return main;
+  }
   const target = continuedUrl ?? site.homeUrl;
   // Reuse one tab per site instead of opening a new tab for every message.
   const page = pages.find((item) => item.url() === target) ?? pages.find((item) => sameSite(item, site)) ?? await context.newPage();
   await closeDuplicates(pages, site, page);
   // The VM is small: close other AI sites so only one heavy app is loaded at a time.
   for (const other of pages) {
-    if (other !== page && WEB_SITES.some((item) => item.id !== site.id && sameSite(other, item))) await other.close().catch(() => undefined);
+    if (other !== page && WEB_SITES.some((item) => !item.desktopApp && item.id !== site.id && sameSite(other, item))) await other.close().catch(() => undefined);
   }
   if (page.url() !== target) await page.goto(target, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.bringToFront().catch(() => undefined);

@@ -331,7 +331,16 @@ function Chat(props: {
           <span className="badge">{props.boot.settings.router === "drex" ? "Drex routing" : "Local rules"}</span>
           {running ? <span className="badge info">Task running</span> : null}
         </div>
-        <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Build a portfolio website." required />
+        {props.boot.bots.filter((item) => item.id !== bot?.id).length ? (
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Ask a bot:</span>
+            {props.boot.bots.filter((item) => item.id !== bot?.id).map((item) => (
+              <Button key={item.id} type="button" size="sm" variant="outline" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@${item.name} `)}>@{item.name}</Button>
+            ))}
+            {props.boot.bots.length > 1 && !bot ? <Button type="button" size="sm" variant="ghost" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@all `)}>@all</Button> : null}
+          </div>
+        ) : null}
+        <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={bot ? `Message ${bot.name}` : "Type a task, or @mention bots to hand it to them."} required />
         <div className="row">
           <Button type="submit" disabled={busy || running}>{busy ? "Sending…" : "Send"}</Button>
           {pendingKey.current ? <span style={{ color: "var(--info)", fontSize: 12 }}>A previous send did not finish. The next click reuses its request id.</span> : null}
@@ -347,6 +356,7 @@ const TAGLINES: Partial<Record<string, string>> = {
   "gemini-web": "gemini.google.com in your desktop's browser",
   "perplexity-web": "perplexity.ai in your desktop's browser",
   "grok-web": "grok.com in your desktop's browser",
+  "grok-bot": "The Grok Bot app on your cloud desktop",
   "claude-code": "Claude Code CLI in your desktop",
   "cursor-cli": "Cursor CLI in your desktop",
 };
@@ -472,6 +482,7 @@ const BOT_CHOICES: { agentId: string; name: string; job: string }[] = [
   { agentId: "claude-web", name: "Relay-Claude", job: "Careful writing, analysis and reviewing other bots' work." },
   { agentId: "chatgpt-web", name: "Relay-ChatGPT", job: "General help: drafts, ideas, explanations and planning." },
   { agentId: "gemini-web", name: "Relay-Gemini", job: "Research with Google knowledge, summaries and comparisons." },
+  { agentId: "grok-bot", name: "Relay-GrokBot", job: "Long-running work and routines in the Grok Bot app." },
   { agentId: "grok-web", name: "Relay-Grok", job: "Current events, X/Twitter context and quick takes." },
   { agentId: "perplexity-web", name: "Relay-Perplexity", job: "Web research with sources." },
   { agentId: "claude-code", name: "Relay-ClaudeCode", job: "Writing and changing code in its project folder." },

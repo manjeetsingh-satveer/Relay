@@ -6,10 +6,11 @@ import { executeCursor, executeGrokBot, executeOpenAI } from "../src/adapters/ex
 import { ADAPTERS } from "../src/adapters/catalog.ts";
 
 describe("adapter catalog", () => {
-  it("marks Grok Bot unsupported and keeps Drex off the chat path", () => {
+  it("drives Grok Bot through its desktop app (no phone calls) and keeps Drex off the chat path", () => {
     const grok = ADAPTERS.find((item) => item.id === "grok-bot");
     const drex = ADAPTERS.find((item) => item.id === "drex");
-    expect(grok?.support).toBe("unsupported");
+    expect(grok?.support).toBe("supported");
+    expect(grok?.credential).toBe("browser");
     expect(grok?.capabilities.phone).toBe(false);
     expect(drex?.capabilities.chat).toBe(false);
     expect(drex?.summary).toMatch(/not a chat model/);

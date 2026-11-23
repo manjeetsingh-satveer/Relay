@@ -60,3 +60,5 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 #screen { width: 100%; max-width: calc(75vh * 16 / 9); aspect-ratio: 16 / 9; margin: 0 auto; background: #000; overflow: hidden; }
 #screen canvas { max-width: 100%; }
+
+select option { background: var(--card); color: var(--foreground); }

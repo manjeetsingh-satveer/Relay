@@ -167,15 +167,13 @@ export const ADAPTERS: AdapterMeta[] = [
   {
     id: "grok-bot",
     displayName: "Grok Bot",
-    support: "unsupported",
-    unsupportedReason:
-      "Grok Bot docs describe chat, routines, and US phone calls inside the Grok Bot desktop and phone apps. They do not describe an API for another app to send a Bot a message, read the reply, place a call, or read call status. A routine webhook can start a routine you already created, and HTTP 200 only means the run was accepted. Relay does not call that webhook, because it cannot show a real result. The xAI API row is a different product.",
-    summary: "Separate product from grok.com and from the xAI API. Phone calls stay unavailable here.",
+    support: "supported",
+    summary: "Relay types into the Grok Bot desktop app in your cloud desktop and copies its reply back, the same way it uses the AI websites. Sign in to Grok Bot there yourself. Grok Bot has no API, so this drives its window. Phone calls stay inside Grok Bot.",
     docsUrl: "https://docs.x.ai/grok-bot/chat-and-collaboration",
-    credential: "none",
+    credential: "browser",
     modelEditable: false,
-    modelHelp: "No model setting. There is no documented chat API to point at a model.",
-    capabilities: { chat: false, files: false, review: false, codingAgent: false, sessionContinue: false, cancel: false, phone: false },
+    modelHelp: "Grok Bot chooses its own model.",
+    capabilities: { chat: true, files: false, review: true, codingAgent: false, sessionContinue: false, cancel: true, phone: false },
   },
   {
     id: "drex",

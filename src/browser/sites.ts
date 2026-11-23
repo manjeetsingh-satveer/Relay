@@ -21,8 +21,15 @@ export interface SiteDefinition {
   termsNote: string;
   /** A URL that means "you are signed out" (checked before looking for the composer). */
   loginUrl?: RegExp;
+  /** Chrome DevTools endpoint. Defaults to the desktop's Chromium on 127.0.0.1:9222. */
+  cdpUrl?: string;
+  /** A desktop (Electron) app: reuse its own window, never navigate or open tabs. */
+  desktopApp?: boolean;
   selectors: SiteSelectors;
 }
+
+export const DEFAULT_CDP = "http://127.0.0.1:9222";
+export const GROK_BOT_CDP = "http://127.0.0.1:9224";
 
 const fixture = "[data-relay='composer']";
 
@@ -32,6 +39,27 @@ const fixture = "[data-relay='composer']";
  * checked against a logged-in session. When a site changes, edit this file.
  */
 export const WEB_SITES: SiteDefinition[] = [
+  {
+    id: "grok-bot",
+    label: "via the Grok Bot desktop app",
+    homeUrl: "file:///opt/Grok%20Bot/resources/app.asar/dist/renderer/index.html",
+    cdpUrl: GROK_BOT_CDP,
+    desktopApp: true,
+    termsUrl: "https://x.ai/legal/terms-of-service",
+    termsNote: "xAI's terms apply to Grok Bot. Relay types into the Grok Bot window you signed in to, on your own desktop.",
+    // Unconfirmed guesses until checked against a signed-in Grok Bot window.
+    selectors: {
+      composer: [fixture, "textarea", "[contenteditable='true']"],
+      send: ["[data-relay='send']", "button[aria-label*='Send' i]", "button[type='submit']"],
+      assistant: ["[data-relay='assistant']", "[data-role='assistant']", "[data-message-author='assistant']", "[class*='assistant' i]", "[class*='message' i]"],
+      code: ["pre code"],
+      login: ["[data-relay='login']", "button:text-is('Sign in')"],
+      captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
+      rateLimit: ["[data-relay='limit']", "text=/usage limit|rate limit|message limit/i"],
+      streaming: ["[data-relay='streaming']"],
+      stop: ["[data-relay='stop']", "button[aria-label*='Stop' i]"],
+    },
+  },
   {
     id: "claude-web",
     label: "via Claude web app",

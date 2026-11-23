@@ -43,7 +43,20 @@ perplexity|Perplexity|https://www.perplexity.ai/
 cursor-web|Cursor (web)|https://cursor.com/agents
 copilot|GitHub Copilot|https://github.com/copilot
 EOF
-entry "$HOME/Desktop/relay-grok-bot.desktop" "Install Grok Bot" /usr/local/bin/relay-install-grok-bot system-software-install
+log "Installing the Grok Bot desktop app"
+# Official x64 .deb from xAI (the "Download for Linux" link on x.ai/bot). The user signs in themselves.
+if curl -fsSL --retry 2 -o /tmp/grok-bot.deb "https://api2.cursor.sh/updates/download/stable/linux-x64/grok-bot-fb0a830618be0c54"; then
+  sudo apt-get update -qq && sudo apt-get install -y /tmp/grok-bot.deb && rm -f /tmp/grok-bot.deb
+fi
+# Grok Bot opens with a local-only DevTools port so Relay can type into it and read replies.
+sudo tee /usr/local/bin/relay-grok-bot >/dev/null <<'EOF'
+#!/bin/sh
+if ! command -v grok-bot >/dev/null 2>&1; then exec /usr/local/bin/relay-install-grok-bot; fi
+exec grok-bot --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port=9224 "$@"
+EOF
+sudo chmod 755 /usr/local/bin/relay-grok-bot
+entry "$HOME/Desktop/relay-grok-bot.desktop" "Grok Bot" /usr/local/bin/relay-grok-bot grok-bot
+entry "$HOME/.config/autostart/relay-grok-bot.desktop" "Grok Bot" /usr/local/bin/relay-grok-bot
 chmod 755 "$HOME"/Desktop/*.desktop
 cat > "$HOME/.vnc/xstartup" <<'EOF'
 #!/bin/sh

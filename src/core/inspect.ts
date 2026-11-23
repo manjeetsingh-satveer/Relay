@@ -13,6 +13,7 @@ export async function inspectIntegrations(input: {
 }): Promise<IntegrationView[]> {
   const fetchImpl = input.runtime?.fetchImpl;
   const browserUp = await probeCdp("http://127.0.0.1:9222", fetchImpl);
+  const grokBotUp = await probeCdp("http://127.0.0.1:9224", fetchImpl);
   const guestUp = await probeGuest("http://127.0.0.1:43125/health", fetchImpl);
   const useApi = input.store.data.settings.useApiKeys;
   const views: IntegrationView[] = [];
@@ -31,6 +32,12 @@ export async function inspectIntegrations(input: {
     let availableForRouting = false;
     if (meta.support === "unsupported") {
       authDetail = "No credential applies. This integration is unsupported.";
+    } else if (meta.credential === "browser" && meta.id === "grok-bot") {
+      install = grokBotUp ? "installed" : "not-installed";
+      installDetail = grokBotUp ? "The Grok Bot app is open on your cloud desktop." : "Grok Bot isn't open. Open it from the Grok Bot icon on your cloud desktop.";
+      auth = grokBotUp ? "not-verified" : "unconfigured";
+      authDetail = "Sign in to Grok Bot in its own window. Relay does not store or type a password.";
+      availableForRouting = grokBotUp;
     } else if (meta.credential === "browser") {
       install = browserUp ? "installed" : "not-installed";
       installDetail = browserUp

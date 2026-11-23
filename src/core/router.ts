@@ -29,7 +29,7 @@ export function routeLocal(input: {
   available: IntegrationView[];
   allowSameAgentReview: boolean;
 }): RouteDecision {
-  const usable = input.available.filter(canExecute);
+  const usable = input.available.filter((view) => canExecute(view) && (view.id !== "grok-bot" || view.id === input.requested));
   if (input.requested) {
     const chosen = usable.find((item) => item.id === input.requested);
     if (!chosen) {
@@ -122,7 +122,7 @@ function finish(input: { mode: import("../shared/types.ts").TaskMode; allowSameA
 export function canExecute(view: IntegrationView): boolean {
   if (view.support !== "supported") return false;
   if (!view.availableForRouting) return false;
-  if (view.id === "drex" || view.id === "grok-bot") return false;
+  if (view.id === "drex") return false;
   if (view.install === "not-installed") return false;
   if (view.credential === "api-key" && view.auth !== "stored") return false;
   return view.capabilities.chat || view.capabilities.codingAgent;

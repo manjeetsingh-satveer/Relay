@@ -41,6 +41,7 @@ export const BOT_TEMPLATES: { agentId: IntegrationId; name: string; job: string 
   { agentId: "claude-web", name: "Relay-Claude", job: "Careful writing, analysis and reviewing other bots' work." },
   { agentId: "chatgpt-web", name: "Relay-ChatGPT", job: "General help: drafts, ideas, explanations and planning." },
   { agentId: "gemini-web", name: "Relay-Gemini", job: "Research with Google knowledge, summaries and comparisons." },
+  { agentId: "grok-bot", name: "Relay-GrokBot", job: "Long-running work and routines in the Grok Bot app." },
   { agentId: "grok-web", name: "Relay-Grok", job: "Current events, X/Twitter context and quick takes." },
   { agentId: "perplexity-web", name: "Relay-Perplexity", job: "Web research with sources." },
   { agentId: "claude-code", name: "Relay-ClaudeCode", job: "Writing and changing code in its project folder." },
@@ -144,4 +145,16 @@ export function botPreamble(bot: Bot): string {
   if (bot.job.trim()) parts.push(`Your job: ${bot.job.trim()}`);
   if (bot.memory.trim()) parts.push(`Things the user asked you to remember:\n${bot.memory.trim()}`);
   return parts.join("\n");
+}
+
+/** Bots named with @ in a message, in the order they appear. "@all" means every bot. */
+export function findMentions(text: string, bots: Bot[]): Bot[] {
+  if (/(^|\s)@all\b/i.test(text)) return [...bots];
+  const found: { bot: Bot; at: number }[] = [];
+  for (const bot of [...bots].sort((a, b) => b.name.length - a.name.length)) {
+    const escaped = bot.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`(^|[^\\w@])@${escaped}(?![\\w-])`, "i").exec(text);
+    if (match && !found.some((item) => item.bot.id === bot.id)) found.push({ bot, at: match.index });
+  }
+  return found.sort((a, b) => a.at - b.at).map((item) => item.bot);
 }
