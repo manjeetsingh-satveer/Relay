@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "productName": "Relay",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": false,
   "description": "One desktop chat that coordinates the AI tools you already use, and can open a real Linux machine.",
   "author": "Manjeet Singh",
