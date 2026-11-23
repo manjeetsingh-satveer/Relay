@@ -8,7 +8,7 @@ import { MemorySecretStore } from "../src/core/secrets.ts";
 type Call = { method: string; url: string; body: unknown };
 
 /** A tiny fake of the GitHub endpoints Relay uses. */
-function fakeGitHub(options: { codespaces?: { name: string; state: string; display_name?: string }[] } = {}) {
+function fakeGitHub(options: { codespaces?: { name: string; state: string; display_name?: string; retention_expires_at?: string | null }[] } = {}) {
   const calls: Call[] = [];
   const keys = nacl.box.keyPair();
   let codespaces = [...(options.codespaces ?? [])];
@@ -34,6 +34,7 @@ function fakeGitHub(options: { codespaces?: { name: string; state: string; displ
       codespaces.push(created);
       return json(201, created);
     }
+    if (url.endsWith("/stop") && method === "POST") return json(200, {});
     if (url.endsWith("/start") && method === "POST") {
       codespaces = codespaces.map((c) => (url.includes(c.name) ? { ...c, state: "Starting" } : c));
       return json(200, {});
@@ -57,6 +58,30 @@ describe("GitHub device flow", () => {
   });
 });
 
+describe("keep-alive", () => {
+  const now = Date.parse("2026-12-01T00:00:00Z");
+  const day = 24 * 60 * 60 * 1000;
+  const noWait = async () => undefined;
+  it("wakes and re-stops a Codespace that would be deleted within 7 days", async () => {
+    const gh = fakeGitHub({ codespaces: [{ name: "relay-old", state: "Shutdown", display_name: "relay", retention_expires_at: new Date(now + 3 * day).toISOString() }] });
+    const result = await new GitHubCodespaces("gho_test", gh.fetchImpl).keepAlive(now, noWait);
+    expect(result.action).toBe("renewed");
+    const posts = gh.calls.filter((c) => c.method === "POST").map((c) => c.url.split("/").pop());
+    expect(posts).toEqual(["start", "stop"]);
+  });
+  it("leaves it alone when deletion is far away, running, or there is no Codespace", async () => {
+    for (const codespaces of [
+      [{ name: "a", state: "Shutdown", display_name: "relay", retention_expires_at: new Date(now + 20 * day).toISOString() }],
+      [{ name: "b", state: "Available", display_name: "relay", retention_expires_at: null }],
+      [],
+    ]) {
+      const gh = fakeGitHub({ codespaces });
+      expect((await new GitHubCodespaces("gho_test", gh.fetchImpl).keepAlive(now, noWait)).action).toBe("none");
+      expect(gh.calls.some((c) => c.method === "POST")).toBe(false);
+    }
+  });
+});
+
 describe("Relay Codespace", () => {
   it("reuses and wakes the user's existing Relay Codespace", async () => {
     const gh = fakeGitHub({ codespaces: [{ name: "relay-old", state: "Shutdown", display_name: "relay" }] });
@@ -73,7 +98,7 @@ describe("Relay Codespace", () => {
     expect(info.setupToken).toBeTruthy();
     expect(gh.secret()).toBe(info.setupToken); // the sealed secret decrypts to the same code
     const create = gh.calls.find((c) => c.method === "POST" && c.url.endsWith("/user/codespaces"))!;
-    expect(create.body).toEqual({ repository_id: 42, ref: "main", machine: "basicLinux32gb", idle_timeout_minutes: 20, display_name: "relay" });
+    expect(create.body).toEqual({ repository_id: 42, ref: "main", machine: "basicLinux32gb", idle_timeout_minutes: 20, retention_period_minutes: 43200, display_name: "relay" });
     const secretIndex = gh.calls.findIndex((c) => c.url.endsWith("RELAY_SETUP_TOKEN"));
     const createIndex = gh.calls.indexOf(create);
     expect(secretIndex).toBeLessThan(createIndex); // secret exists before the machine boots

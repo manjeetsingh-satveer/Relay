@@ -18,6 +18,10 @@ const SECRET_NAME = "RELAY_SETUP_TOKEN";
 const DISPLAY_NAME = "relay";
 const MACHINE = "basicLinux32gb"; // 2 cores, 8 GB RAM
 const IDLE_MINUTES = 20;
+/** GitHub deletes a stopped Codespace after this long unused; 30 days is the maximum. */
+const RETENTION_MINUTES = 30 * 24 * 60;
+/** Wake the Codespace when it would be deleted within this window. */
+const KEEPALIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const SCOPE = "codespace";
 
 type Fetch = typeof fetch;
@@ -133,10 +137,48 @@ export class GitHubCodespaces {
         ref: "main",
         machine: MACHINE,
         idle_timeout_minutes: IDLE_MINUTES,
+        retention_period_minutes: RETENTION_MINUTES,
         display_name: DISPLAY_NAME,
       }),
     });
     return { name: created.name, state: created.state, url: relayUrl(created.name), created: true, setupToken };
+  }
+
+  /**
+   * Stops GitHub from deleting an unused Codespace: if it would be deleted within 7 days,
+   * start it briefly (which resets the retention clock), then stop it again. Uses ~2 minutes
+   * of the user's free hours. Never creates a Codespace.
+   */
+  async keepAlive(now = Date.now(), sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))): Promise<{ action: "none" | "renewed"; name?: string; expiresAt?: string | null }> {
+    const repositoryId = await this.repoId();
+    const list = await this.api<{ codespaces: { name: string; state: string; display_name?: string; repository: { id: number }; retention_expires_at?: string | null }[] }>(
+      `/user/codespaces?repository_id=${repositoryId}&per_page=100`,
+    );
+    const mine = list.codespaces.filter((item) => item.repository.id === repositoryId);
+    const relay = mine.find((item) => item.display_name === DISPLAY_NAME) ?? mine[0];
+    if (!relay) return { action: "none" };
+    const expiresAt = relay.retention_expires_at ? Date.parse(relay.retention_expires_at) : null;
+    if (relay.state !== "Shutdown" || expiresAt === null || expiresAt - now > KEEPALIVE_WINDOW_MS) {
+      return { action: "none", name: relay.name, expiresAt: relay.retention_expires_at ?? null };
+    }
+    await this.api(`/user/codespaces/${relay.name}/start`, { method: "POST" });
+    for (let i = 0; i < 60; i += 1) {
+      await sleep(5000);
+      if ((await this.state(relay.name)) === "Available") break;
+    }
+    await this.api(`/user/codespaces/${relay.name}/stop`, { method: "POST" });
+    return { action: "renewed", name: relay.name };
+  }
+
+  /** The Relay Codespace's deletion date (only set while it is stopped), without changing anything. */
+  async expiry(): Promise<{ name: string; state: string; expiresAt: string | null } | null> {
+    const repositoryId = await this.repoId();
+    const list = await this.api<{ codespaces: { name: string; state: string; display_name?: string; repository: { id: number }; retention_expires_at?: string | null }[] }>(
+      `/user/codespaces?repository_id=${repositoryId}&per_page=100`,
+    );
+    const mine = list.codespaces.filter((item) => item.repository.id === repositoryId);
+    const relay = mine.find((item) => item.display_name === DISPLAY_NAME) ?? mine[0];
+    return relay ? { name: relay.name, state: relay.state, expiresAt: relay.retention_expires_at ?? null } : null;
   }
 
   async state(name: string): Promise<string> {
