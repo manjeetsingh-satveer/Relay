@@ -311,50 +311,88 @@ function Chat(props: {
   );
 }
 
+const TAGLINES: Partial<Record<string, string>> = {
+  "claude-web": "claude.ai in your desktop's browser",
+  "chatgpt-web": "chatgpt.com in your desktop's browser",
+  "gemini-web": "gemini.google.com in your desktop's browser",
+  "perplexity-web": "perplexity.ai in your desktop's browser",
+  "grok-web": "grok.com in your desktop's browser",
+  "claude-code": "Claude Code CLI in your desktop",
+  "cursor-cli": "Cursor CLI in your desktop",
+};
+
+function statusOf(item: IntegrationView): { label: string; tone: string } {
+  if (item.support !== "supported") return { label: "Not available", tone: "" };
+  if (item.latestAttempt && !item.latestAttempt.ok) return { label: "Last try failed", tone: "bad" };
+  if (item.lastSuccess) return { label: `Worked ${formatWhen(item.lastSuccess.at)}`, tone: "good" };
+  if (item.credential === "api-key") return item.auth === "stored" ? { label: "Key saved", tone: "info" } : { label: "No key", tone: "" };
+  if (item.credential === "vm-cli") return { label: "Log in once in the terminal", tone: "info" };
+  if (item.credential === "browser") return { label: "Sign in once", tone: "info" };
+  return { label: "Optional", tone: "" };
+}
+
 function Integrations(props: { boot: Bootstrap; refresh: () => Promise<Bootstrap>; onError: (message: string) => void }) {
+  const all = props.boot.integrations;
+  const apps = all.filter((item) => item.credential === "browser");
+  const clis = all.filter((item) => item.credential === "vm-cli");
+  const extra = all.filter((item) => item.credential === "api-key" || item.credential === "none");
+  const list = (items: IntegrationView[]) => (
+    <div className="card" style={{ padding: 0, gap: 0 }}>
+      {items.map((item, index) => <IntegrationRow key={item.id} item={item} first={index === 0} refresh={props.refresh} onError={props.onError} />)}
+    </div>
+  );
+  const heading = (title: string, hint: string) => (
+    <div>
+      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{title}</h2>
+      <p style={{ margin: "2px 0 0", color: "var(--muted-foreground)", fontSize: 13 }}>{hint}</p>
+    </div>
+  );
   return (
     <div className="scroll" style={{ padding: 20 }}>
-      <h1 className="serif" style={{ fontWeight: 500 }}>Integrations</h1>
-      <p style={{ maxWidth: 720, color: "var(--muted-foreground)" }}>Supported, installed, credential stored, and last real result are separate. A stored key is not a successful call.</p>
-      <div className="grid-cards">
-        {props.boot.integrations.map((item) => <IntegrationCard key={item.id} item={item} refresh={props.refresh} onError={props.onError} />)}
+      <div style={{ display: "grid", gap: 22, maxWidth: 860 }}>
+        <div>
+          <h1 className="serif" style={{ fontWeight: 500, margin: 0 }}>Integrations</h1>
+          <p style={{ margin: "4px 0 0", color: "var(--muted-foreground)" }}>The AI tools Relay can use. Sign in to each once in the computer tab. Relay never sees or types your passwords.</p>
+        </div>
+        {apps.length ? <section style={{ display: "grid", gap: 8 }}>{heading("AI apps", "The websites you already pay for, in your cloud desktop.")}{list(apps)}</section> : null}
+        {clis.length ? <section style={{ display: "grid", gap: 8 }}>{heading("Coding agents", "Command-line tools inside your cloud desktop.")}{list(clis)}</section> : null}
+        {extra.length ? (
+          <details>
+            <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 16 }}>API keys and extras (optional)</summary>
+            <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Only needed if you'd rather pay per use with an API key. Turn on API keys in settings to use them.</p>
+            {list(extra)}
+          </details>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<unknown>; onError: (message: string) => void }) {
+function IntegrationRow(props: { item: IntegrationView; first: boolean; refresh: () => Promise<unknown>; onError: (message: string) => void }) {
   const [key, setKey] = useState("");
   const [model, setModel] = useState(props.item.model);
   const item = props.item;
   const latest = item.latestAttempt;
+  const status = statusOf(item);
   return (
-    <article className="card">
-      <div className="row">
-        <h2 style={{ margin: 0 }}>{item.displayName}</h2>
-        <span className={`badge ${item.support === "supported" ? "info" : ""}`}>{item.support}</span>
-        <span className="badge">{item.install}</span>
-        <span className="badge">{item.auth}</span>
-        {item.lastSuccess ? <span className="badge good">last success {formatWhen(item.lastSuccess.at)}</span> : <span className="badge">no successful task</span>}
+    <div style={{ padding: "12px 16px", borderTop: props.first ? "none" : "1px solid var(--border)", display: "grid", gap: 6 }}>
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <strong>{item.displayName}</strong>
+            <span className={`badge ${status.tone}`}>{status.label}</span>
+          </div>
+          <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{TAGLINES[item.id] ?? item.summary.split(". ")[0] + "."}</div>
+        </div>
+        {item.credential === "browser" ? (
+          <Button size="sm" variant="outline" onClick={() => api.openLogin(item.id).then((result) => props.onError(result.detail)).catch((reason) => props.onError(reason.message))}>Open sign-in</Button>
+        ) : null}
       </div>
-      <p>{item.summary}</p>
-      {item.unsupportedReason ? <p>{item.unsupportedReason}</p> : null}
-      <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{item.authDetail} {item.installDetail}</p>
-      <p><a href={item.docsUrl}>Official docs</a></p>
-      {latest ? <p>Latest attempt {formatWhen(latest.at)}: {latest.ok ? "succeeded" : "failed"} — {latest.detail}</p> : null}
-      {item.modelEditable ? (
-        <label className="grid-cards">
-          <Label>Model</Label>
-          <Input value={model} onChange={(event) => setModel(event.target.value)} />
-          <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{item.modelHelp}</span>
-        </label>
-      ) : <p style={{ fontSize: 13 }}>{item.modelHelp}</p>}
-      {item.credential === "browser" ? (
-        <Button size="sm" variant="outline" onClick={() => api.openLogin(item.id).then((result) => props.onError(result.detail)).catch((reason) => props.onError(reason.message))}>Open sign-in in the VM</Button>
-      ) : null}
+      {latest && !latest.ok ? <div style={{ color: "var(--destructive)", fontSize: 13 }}>{latest.detail}</div> : null}
       {item.credential === "api-key" ? (
         <form
           className="row"
+          style={{ gap: 8, flexWrap: "wrap" }}
           onSubmit={async (event) => {
             event.preventDefault();
             try {
@@ -369,21 +407,34 @@ function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<
             }
           }}
         >
-          <Input type="password" value={key} onChange={(event) => setKey(event.target.value)} placeholder={item.auth === "stored" ? "Replace stored key" : "API key"} autoComplete="off" />
+          <Input style={{ flex: "1 1 200px", width: "auto" }} type="password" value={key} onChange={(event) => setKey(event.target.value)} placeholder={item.auth === "stored" ? "Replace saved key" : "Paste API key"} autoComplete="off" />
           <Button type="submit" size="sm">Save</Button>
-          {item.auth === "stored" ? <Button type="button" size="sm" variant="ghost" onClick={() => api.deleteKey(item.id).then(props.refresh).catch((reason) => props.onError(reason.message))}>Remove key</Button> : null}
+          {item.auth === "stored" ? <Button type="button" size="sm" variant="ghost" onClick={() => api.deleteKey(item.id).then(props.refresh).catch((reason) => props.onError(reason.message))}>Remove</Button> : null}
+          {item.id !== "anthropic" && item.id !== "perplexity" ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => api.probe(item.id, "key").then(props.refresh).catch((reason) => props.onError(reason.message))}>Check key</Button>
+          ) : null}
+          {item.id !== "cursor" && item.id !== "xai" ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => api.probe(item.id, "live").then(props.refresh).catch((reason) => props.onError(reason.message))}>Test</Button>
+          ) : null}
         </form>
       ) : null}
-      <div className="row">
-        {item.credential === "api-key" && item.id !== "anthropic" && item.id !== "perplexity" ? (
-          <Button size="sm" variant="outline" onClick={() => api.probe(item.id, "key").then(props.refresh).catch((reason) => props.onError(reason.message))}>Check key</Button>
-        ) : null}
-        {item.credential === "api-key" && item.id !== "cursor" && item.id !== "xai" ? (
-          <Button size="sm" variant="outline" onClick={() => api.probe(item.id, "live").then(props.refresh).catch((reason) => props.onError(reason.message))}>Live check</Button>
-        ) : null}
-        {item.credential === "vm-cli" ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>This CLI runs inside the VM. Log in there. Relay does not type the password.</span> : null}
-      </div>
-    </article>
+      <details>
+        <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--muted-foreground)" }}>Details</summary>
+        <div style={{ display: "grid", gap: 6, fontSize: 13, paddingTop: 6 }}>
+          <span>{item.summary}</span>
+          {item.unsupportedReason ? <span>{item.unsupportedReason}</span> : null}
+          <span style={{ color: "var(--muted-foreground)" }}>{item.authDetail} {item.installDetail}</span>
+          {item.modelEditable ? (
+            <label style={{ display: "grid", gap: 4 }}>
+              <Label>Model</Label>
+              <Input value={model} onChange={(event) => setModel(event.target.value)} />
+              <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{item.modelHelp}</span>
+            </label>
+          ) : <span style={{ color: "var(--muted-foreground)" }}>{item.modelHelp}</span>}
+          <a href={item.docsUrl}>Official docs</a>
+        </div>
+      </details>
+    </div>
   );
 }
 
