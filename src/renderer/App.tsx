@@ -417,7 +417,19 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
       viewer.current = client as unknown as { focus: () => void };
       viewer.current.focus();
     };
-    connect().catch((reason) => props.onError(reason instanceof Error ? reason.message : "noVNC failed to load."));
+    connect().then(
+      () => sessionStorage.removeItem("relay-viewer-reload"),
+      (reason) => {
+        // A dropped link (desktop waking, tunnel hiccup) makes the lazy chunk fail, and the browser
+        // caches that failure, so reload the page once instead of leaving a black screen.
+        if (!sessionStorage.getItem("relay-viewer-reload")) {
+          sessionStorage.setItem("relay-viewer-reload", "1");
+          setTimeout(() => location.reload(), 1500);
+          return;
+        }
+        props.onError(reason instanceof Error ? `The desktop viewer couldn't load. Check your connection and reopen Relay. (${reason.message})` : "noVNC failed to load.");
+      },
+    );
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
