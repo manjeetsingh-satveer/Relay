@@ -33,8 +33,10 @@ export function githubCloudRoutes(options: { clientId: string | undefined; secre
       const token = await options.secrets.get(GITHUB_TOKEN_KEY);
       if (!token) return { configured: Boolean(options.clientId), signedIn: false };
       try {
-        const user = await new GitHubCodespaces(token, options.fetchImpl).user();
-        return { configured: true, signedIn: true, login: user.login };
+        const github = new GitHubCodespaces(token, options.fetchImpl);
+        const user = await github.user();
+        const scopes = await github.scopes();
+        return { configured: true, signedIn: true, login: user.login, needsUpgrade: !scopes.includes("workflow") };
       } catch (error) {
         if (error instanceof RelayError && error.code === "github_signed_out") {
           await options.secrets.delete(GITHUB_TOKEN_KEY);

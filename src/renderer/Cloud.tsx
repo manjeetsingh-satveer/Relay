@@ -25,6 +25,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function CloudLauncher() {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [login, setLogin] = useState<string | null>(null);
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -37,10 +38,14 @@ export function CloudLauncher() {
 
   async function boot() {
     try {
-      const state = await call<{ configured: boolean; signedIn: boolean; login?: string }>("/api/cloud/state");
+      const state = await call<{ configured: boolean; signedIn: boolean; login?: string; needsUpgrade?: boolean }>("/api/cloud/state");
       if (!state.configured) return setPhase({ kind: "not-configured" });
       if (!state.signedIn) return setPhase({ kind: "signed-out" });
       setLogin(state.login ?? null);
+      if (state.needsUpgrade && !sessionStorage.getItem("relay-skip-upgrade")) {
+        setNeedsUpgrade(true);
+        return setPhase({ kind: "signed-out" });
+      }
       await open();
     } catch (reason) {
       setPhase({ kind: "error", message: reason instanceof Error ? reason.message : "Something went wrong." });
@@ -106,11 +111,23 @@ export function CloudLauncher() {
         {phase.kind === "not-configured" ? <p>Continue with GitHub isn't set up in this build yet.</p> : null}
         {phase.kind === "signed-out" ? (
           <>
+            {needsUpgrade ? (
+              <>
+                <h1 className="serif" style={{ fontWeight: 500, margin: 0 }}>Turn on scheduled bots</h1>
+                <p style={{ margin: 0, color: "var(--muted-foreground)" }}>
+                  To wake your cloud desktop at your bots' times, Relay creates a private <strong>relay-alarm</strong> repository in your GitHub account with a scheduled GitHub Action. GitHub will ask you to allow repository and workflow access.
+                </p>
+                <Button onClick={() => void signIn()}>Allow and continue</Button>
+                <Button variant="ghost" onClick={() => { sessionStorage.setItem("relay-skip-upgrade", "1"); setNeedsUpgrade(false); void open(); }}>Not now</Button>
+              </>
+            ) : null}
+            {needsUpgrade ? null : <>
             <h1 className="serif" style={{ fontWeight: 500, margin: 0 }}>Your free cloud desktop</h1>
             <p style={{ margin: 0, color: "var(--muted-foreground)" }}>
               Relay runs in a private Codespace in <strong>your own</strong> GitHub account, using GitHub's free monthly hours. No card. Open it from your PC or phone and carry on where you left off.
             </p>
             <Button onClick={() => void signIn()}>Continue with GitHub</Button>
+            </>}
           </>
         ) : null}
         {phase.kind === "code" ? (

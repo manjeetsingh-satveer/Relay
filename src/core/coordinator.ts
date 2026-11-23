@@ -10,6 +10,7 @@ import { mediaTypeFor, safeArtifactName } from "./artifacts.ts";
 import { RelayError, isRelayError } from "./errors.ts";
 import { inspectIntegrations } from "./inspect.ts";
 import { buildPrompt } from "./prompt.ts";
+import { botPreamble } from "./bots.ts";
 import { canExecute, drexRequest, interpretDrex, routeLocal } from "./router.ts";
 import type { SecretStore } from "./secrets.ts";
 import { createId, type Store } from "./store.ts";
@@ -264,7 +265,8 @@ export class Coordinator {
     const continued = Boolean(session && view.capabilities.sessionContinue && !input.forceNewSession && role !== "review");
     const history = this.store.data.messages.filter((message) => message.conversationId === conversation.id);
     const artifacts = this.store.data.artifacts.filter((item) => item.projectId === conversation.projectId);
-    const prompt = buildPrompt({
+    const bot = this.store.data.bots.find((item) => item.conversationId === conversation.id);
+    const built = buildPrompt({
       userText: input.text,
       history,
       artifacts,
@@ -273,6 +275,7 @@ export class Coordinator {
       reviewText: review,
       continued,
     });
+    const prompt = bot && role !== "review" ? `${botPreamble(bot)}\n\n${built}` : built;
     const workspace = await this.workspace(conversation.projectId);
     const before = view.id === "claude-code" ? await snapshot(workspace) : null;
     await this.progress(taskId, `Calling ${view.displayName} for the ${role} step.`);

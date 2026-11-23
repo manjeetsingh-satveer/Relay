@@ -1,11 +1,17 @@
 import type { CallResolution, HealthInfo, IntegrationId, IntegrationView, Settings, TaskRecord, VmView } from "../../shared/types.ts";
 
+export interface BotSchedule { time: string; days: number[]; prompt: string; timeZone: string }
+export interface BotView { id: string; name: string; agentId: string; job: string; memory: string; conversationId: string; createdAt: string; schedule: BotSchedule | null; lastRunKey?: string }
+
 export interface Bootstrap {
   health: HealthInfo;
   settings: Settings;
   projects: { id: string; name: string; repoUrl?: string; createdAt: string }[];
   conversations: { id: string; projectId: string; title: string; createdAt: string; updatedAt: string }[];
   contacts: { id: string; name: string; phone: string; notes: string; createdAt: string }[];
+  bots: BotView[];
+  alarm: { ok: boolean; detail: string; at: string; repoUrl?: string } | null;
+  alarmAvailable: boolean;
   vault: { id: string; kind: "address" | "note"; label: string; value: string; createdAt: string }[];
   integrations: IntegrationView[];
   vm: VmView;
@@ -81,6 +87,12 @@ export const api = {
     request<{ ok: boolean; detail: string }>(`/api/integrations/${id}/probe`, { method: "POST", body: JSON.stringify({ kind }) }),
   addContact: (name: string, phone: string, notes: string) =>
     request("/api/contacts", { method: "POST", body: JSON.stringify({ name, phone, notes }) }),
+  createBot: (input: { name: string; agentId: string; job: string }) => request<BotView>("/api/bots", { method: "POST", body: JSON.stringify(input) }),
+  updateBot: (id: string, input: { name?: string; job?: string; memory?: string; schedule?: BotSchedule | null }) =>
+    request<BotView>(`/api/bots/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteBot: (id: string) => request(`/api/bots/${id}`, { method: "DELETE" }),
+  runBot: (id: string) => request(`/api/bots/${id}/run`, { method: "POST", body: "{}" }),
+  syncAlarm: () => request("/api/alarm/sync", { method: "POST", body: "{}" }),
   addVaultItem: (kind: "address" | "note", label: string, value: string) =>
     request("/api/vault", { method: "POST", body: JSON.stringify({ kind, label, value }) }),
   deleteVaultItem: (id: string) => request(`/api/vault/${id}`, { method: "DELETE" }),

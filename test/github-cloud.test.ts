@@ -54,7 +54,7 @@ describe("GitHub device flow", () => {
     expect(code.userCode).toBe("ABCD-1234");
     expect(await pollDeviceFlow("client", code.deviceCode, gh.fetchImpl)).toEqual({ status: "pending" });
     expect(await pollDeviceFlow("client", code.deviceCode, gh.fetchImpl)).toEqual({ status: "done", token: "gho_test" });
-    expect(gh.calls[0]!.body).toMatchObject({ client_id: "client", scope: "codespace" });
+    expect(gh.calls[0]!.body).toMatchObject({ client_id: "client", scope: "codespace repo workflow" });
   });
 });
 

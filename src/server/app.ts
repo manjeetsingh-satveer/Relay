@@ -19,6 +19,8 @@ import { githubCloudRoutes } from "./github-cloud.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
 import { openLoginPage } from "../browser/cdp.ts";
 import { siteById } from "../browser/sites.ts";
+import { BOT_AGENTS, cronLines, dueBots, initialRunKey, parseTime, validTimeZone, type Bot, type BotSchedule } from "../core/bots.ts";
+import { Alarm } from "../cloud/alarm.ts";
 
 export interface ServerHandle {
   /** Set only in login mode before the owner account exists. */
@@ -183,6 +185,9 @@ export async function startServer(options: {
         conversations: store.data.conversations,
         contacts: store.data.contacts,
         vault: store.data.vault,
+        bots: store.data.bots,
+        alarm: store.data.alarm,
+        alarmAvailable: Boolean(process.env.RELAY_GITHUB_TOKEN && process.env.CODESPACE_NAME),
         integrations: views,
         vm: vmView,
       });
@@ -241,9 +246,10 @@ export async function startServer(options: {
       const body = await json(request);
       const text = stringField(body, "text");
       const idempotencyKey = stringField(body, "idempotencyKey");
-      const mode = body.mode === "collaborative" || body.mode === "team" ? body.mode : "single";
+      const ownerBot = store.data.bots.find((item) => item.conversationId === id);
+      const mode = ownerBot ? "single" : body.mode === "collaborative" || body.mode === "team" ? body.mode : "single";
       if (!text || !idempotencyKey) throw new RelayError("invalid", "text and idempotencyKey are required.");
-      const requested = optionalIntegration(body, "agentId");
+      const requested = ownerBot ? ownerBot.agentId : optionalIntegration(body, "agentId");
       const resolution = resolveCall(store.data.contacts, text);
       if (resolution.kind !== "not-a-call") {
         const existing = store.submission(idempotencyKey);
@@ -386,6 +392,61 @@ export async function startServer(options: {
       createReadStream(file).pipe(response);
       return;
     }
+    if (method === "POST" && url.pathname === "/api/bots") {
+      const body = await json(request);
+      const created = await createBot(body);
+      return send(response, 201, created);
+    }
+    const botMatch = url.pathname.match(/^\/api\/bots\/([^/]+)(\/run)?$/);
+    if (botMatch) {
+      const bot = store.data.bots.find((item) => item.id === botMatch[1]);
+      if (!bot) throw new RelayError("not_found", "Bot not found.", 404);
+      if (method === "POST" && botMatch[2]) {
+        const task = await coordinator.submit({
+          conversationId: bot.conversationId,
+          text: bot.schedule?.prompt || "Do your job now and report back.",
+          mode: "single",
+          idempotencyKey: createId(),
+          requested: bot.agentId,
+        });
+        return send(response, 202, { task });
+      }
+      if (method === "PUT" && !botMatch[2]) {
+        const body = await json(request);
+        const name = optionalString(body, "name")?.trim();
+        const job = typeof body.job === "string" ? body.job.slice(0, 2000) : undefined;
+        const memory = typeof body.memory === "string" ? body.memory.slice(0, 5000) : undefined;
+        const schedule = "schedule" in body ? readSchedule(body.schedule) : undefined;
+        await store.update((data) => {
+          const target = data.bots.find((item) => item.id === bot.id);
+          if (!target) return;
+          if (name) target.name = name.slice(0, 60);
+          if (job !== undefined) target.job = job;
+          if (memory !== undefined) target.memory = memory;
+          if (schedule !== undefined) {
+            target.schedule = schedule;
+            target.lastRunKey = schedule ? initialRunKey(schedule, new Date()) : undefined;
+          }
+          const conversation = data.conversations.find((item) => item.id === target.conversationId);
+          if (conversation && name) conversation.title = target.name;
+        });
+        if (schedule !== undefined) scheduleAlarmSync();
+        notify();
+        return send(response, 200, store.data.bots.find((item) => item.id === bot.id));
+      }
+      if (method === "DELETE" && !botMatch[2]) {
+        await store.update((data) => {
+          data.bots = data.bots.filter((item) => item.id !== bot.id);
+        });
+        if (bot.schedule) scheduleAlarmSync();
+        notify();
+        return send(response, 204, null);
+      }
+    }
+    if (method === "POST" && url.pathname === "/api/alarm/sync") {
+      await syncAlarm();
+      return send(response, 200, store.data.alarm);
+    }
     if (method === "POST" && url.pathname === "/api/vault") {
       const body = await json(request);
       const kind = stringField(body, "kind") === "address" ? "address" : "note";
@@ -464,6 +525,113 @@ export async function startServer(options: {
     return options.cloudDesktop ? { record: null, process: "running" as const, cloud: true } : { record: null, process: "absent" as const };
   }
 
+  // ---- Bots
+  async function botsProject(): Promise<string> {
+    const existing = store.data.projects.find((item) => item.name === "Bots");
+    if (existing) return existing.id;
+    const project = { id: createId(), name: "Bots", repoUrl: undefined, createdAt: new Date().toISOString() };
+    await store.update((data) => data.projects.push(project));
+    return project.id;
+  }
+
+  function readSchedule(value: unknown): BotSchedule | null {
+    if (value === null) return null;
+    if (!value || typeof value !== "object") throw new RelayError("invalid", "Schedule is invalid.");
+    const raw = value as Record<string, unknown>;
+    const time = typeof raw.time === "string" ? raw.time : "";
+    if (parseTime(time) === null) throw new RelayError("invalid", "Pick a time like 08:00.");
+    const days = Array.isArray(raw.days) ? [...new Set(raw.days.filter((day): day is number => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : [];
+    if (days.length === 0) throw new RelayError("invalid", "Pick at least one day.");
+    const timeZone = typeof raw.timeZone === "string" && validTimeZone(raw.timeZone) ? raw.timeZone : "UTC";
+    const prompt = typeof raw.prompt === "string" ? raw.prompt.trim().slice(0, 4000) : "";
+    if (!prompt) throw new RelayError("invalid", "Say what the bot should do each time.");
+    return { time, days, timeZone, prompt };
+  }
+
+  async function createBot(body: Record<string, unknown>): Promise<Bot> {
+    const agentId = optionalIntegration(body, "agentId");
+    if (!agentId || !BOT_AGENTS.includes(agentId)) throw new RelayError("invalid", "Pick which AI this bot uses.");
+    const name = stringField(body, "name")?.trim().slice(0, 60);
+    if (!name) throw new RelayError("invalid", "Give the bot a name.");
+    if (store.data.bots.some((item) => item.name.toLowerCase() === name.toLowerCase())) throw new RelayError("invalid", `You already have a bot called ${name}.`);
+    const projectId = await botsProject();
+    const now = new Date().toISOString();
+    const conversationId = createId();
+    const bot: Bot = {
+      id: createId(),
+      name,
+      agentId,
+      job: typeof body.job === "string" ? body.job.slice(0, 2000) : "",
+      memory: "",
+      conversationId,
+      createdAt: now,
+      schedule: null,
+    };
+    await store.update((data) => {
+      data.conversations.push({ id: conversationId, projectId, title: name, createdAt: now, updatedAt: now, sessions: {} });
+      data.bots.push(bot);
+    });
+    notify();
+    return bot;
+  }
+
+  // Scheduled runs: checked every minute while the Codespace is awake. A late wake-up still runs today's job.
+  async function runDueBots(): Promise<void> {
+    for (const { bot, dateKey } of dueBots(store.data.bots, new Date())) {
+      try {
+        await coordinator.submit({
+          conversationId: bot.conversationId,
+          text: bot.schedule!.prompt,
+          mode: "single",
+          idempotencyKey: `schedule:${bot.id}:${dateKey}`,
+          requested: bot.agentId,
+        });
+        await store.update((data) => {
+          const target = data.bots.find((item) => item.id === bot.id);
+          if (target) target.lastRunKey = dateKey;
+        });
+        notify();
+      } catch {
+        // Busy (another task in this thread) or not ready: try again next minute.
+      }
+    }
+  }
+
+  async function syncAlarm(): Promise<void> {
+    const token = process.env.RELAY_GITHUB_TOKEN;
+    const codespace = process.env.CODESPACE_NAME;
+    let status;
+    if (!token || !codespace) {
+      status = { ok: false, detail: "Wake-ups need Relay for Windows: open it, Continue with GitHub again to allow scheduled bots, and reopen your desktop.", at: new Date().toISOString() };
+    } else {
+      try {
+        const result = await new Alarm(token, options.runtime?.fetchImpl).sync(codespace, cronLines(store.data.bots, new Date()));
+        status = { ok: true, detail: "GitHub will wake your cloud desktop at each bot's time, and once a week.", at: new Date().toISOString(), repoUrl: result.repoUrl };
+      } catch (error) {
+        status = { ok: false, detail: error instanceof Error ? error.message : "Could not set up wake-ups.", at: new Date().toISOString() };
+      }
+    }
+    await store.update((data) => {
+      data.alarm = status;
+    });
+    notify();
+  }
+
+  let alarmTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleAlarmSync(): void {
+    if (alarmTimer) clearTimeout(alarmTimer);
+    alarmTimer = setTimeout(() => void syncAlarm(), 3000);
+    alarmTimer.unref?.();
+  }
+
+  const botTimer = options.cloudDesktop ? setInterval(() => void runDueBots(), 60_000) : undefined;
+  botTimer?.unref?.();
+  if (options.cloudDesktop) {
+    setTimeout(() => void runDueBots(), 20_000).unref?.();
+    // Keep the workflow's times current (offsets change with daylight saving).
+    if (process.env.RELAY_GITHUB_TOKEN) scheduleAlarmSync();
+  }
+
   await new Promise<void>((resolve) => server.listen(options.port, host, resolve));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : options.port;
@@ -472,7 +640,11 @@ export async function startServer(options: {
     store,
     setupToken: auth.setupTokenForLog,
     coordinator,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    close: () => {
+      if (botTimer) clearInterval(botTimer);
+      if (alarmTimer) clearTimeout(alarmTimer);
+      return new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    },
   };
 }
 

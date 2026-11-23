@@ -9,12 +9,12 @@ import { api, type Bootstrap, type ConversationPayload } from "@/lib/api";
 import { formatBytes, formatWhen } from "@/lib/utils";
 import { AccountCard } from "./Auth";
 
-type Tab = "chat" | "integrations" | "computer" | "vault" | "calls" | "settings";
+type Tab = "chat" | "bots" | "integrations" | "computer" | "vault" | "calls" | "settings";
 
 export function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const initialTab = (["chat", "integrations", "computer", "vault", "calls", "settings"] as Tab[]).includes(location.hash.slice(1) as Tab)
+  const initialTab = (["chat", "bots", "integrations", "computer", "vault", "calls", "settings"] as Tab[]).includes(location.hash.slice(1) as Tab)
     ? (location.hash.slice(1) as Tab)
     : "chat";
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -23,9 +23,14 @@ export function App() {
   const [thread, setThread] = useState<ConversationPayload | null>(null);
   const [call, setCall] = useState<CallResolution | null>(null);
 
+  const onboarded = useRef(false);
   async function reload() {
     const next = await api.bootstrap();
     setBoot(next);
+    if (!onboarded.current) {
+      onboarded.current = true;
+      if (next.bots.length === 0 && !location.hash) setTab("bots");
+    }
     setProjectId((current) => current ?? next.projects.at(-1)?.id ?? null);
     setConversationId((current) => {
       if (current) return current;
@@ -71,13 +76,23 @@ export function App() {
             <span>One chat across the tools you already pay for.</span>
           </div>
           <div className="nav">
-            {(["chat", "computer", "vault", "integrations", "settings"] as Tab[]).map((item) => (
+            {(["chat", "bots", "computer", "vault", "integrations", "settings"] as Tab[]).map((item) => (
               <Button key={item} size="sm" variant={tab === item ? "default" : "outline"} onClick={() => { location.hash = item; setTab(item); }}>
                 {item}
               </Button>
             ))}
           </div>
           <div className="scroll" style={{ padding: 12 }}>
+            {boot.bots.length ? (
+              <div style={{ display: "grid", gap: 2, marginBottom: 12 }}>
+                <Label>Bots</Label>
+                {boot.bots.map((bot) => (
+                  <button key={bot.id} onClick={() => { setConversationId(bot.conversationId); location.hash = "chat"; setTab("chat"); }} style={{ background: conversationId === bot.conversationId ? "var(--card)" : "transparent", border: 0, borderRadius: 8, textAlign: "left", color: conversationId === bot.conversationId ? "var(--primary)" : "inherit", padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {bot.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <Projects
               boot={boot}
               projectId={projectId}
@@ -104,6 +119,7 @@ export function App() {
               onError={setError}
             />
           ) : null}
+          {tab === "bots" ? <Bots boot={boot} refresh={reload} onError={setError} onOpen={(id) => { setConversationId(id); location.hash = "chat"; setTab("chat"); }} /> : null}
           {tab === "integrations" ? <Integrations boot={boot} refresh={reload} onError={setError} /> : null}
           {tab === "vault" ? <Vault boot={boot} refresh={reload} onError={setError} onOpenComputer={() => { location.hash = "computer"; setTab("computer"); }} /> : null}
           {tab === "computer" ? <Computer boot={boot} refresh={reload} onError={setError} /> : null}
@@ -201,6 +217,7 @@ function Chat(props: {
   const pendingKey = useRef<string | null>(null);
   const ready = props.boot.integrations.filter((item) => item.availableForRouting);
   const running = props.thread?.tasks.some((task) => task.status === "running") ?? false;
+  const bot = props.boot.bots.find((item) => item.conversationId === props.conversationId);
 
   if (!props.conversationId || !props.thread) {
     return <div className="scroll" style={{ padding: 28 }}><h1 className="serif" style={{ fontWeight: 500 }}>Start with a project.</h1><p style={{ maxWidth: 560, color: "var(--muted-foreground)" }}>Relay does not answer by itself. Start the Linux VM, sign in to Claude or ChatGPT in that desktop, then send a task. If the browser is not signed in, the task stops and says so. API keys stay off unless you enable them.</p></div>;
@@ -208,6 +225,12 @@ function Chat(props: {
 
   return (
     <>
+      {bot ? (
+        <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)" }}>
+          <strong>{bot.name}</strong>
+          <span style={{ color: "var(--muted-foreground)", fontSize: 13 }}> · {agentName(props.boot, bot.agentId)}{bot.job ? ` · ${bot.job}` : ""}</span>
+        </div>
+      ) : null}
       <div className="scroll transcript">
         {props.thread.messages.length === 0 ? <p style={{ color: "var(--muted-foreground)" }}>This conversation is empty.</p> : null}
         {props.thread.messages.map((message) => (
@@ -287,7 +310,7 @@ function Chat(props: {
           }
         }}
       >
-        <div className="row">
+        <div className="row" style={bot ? { display: "none" } : undefined}>
           <Label>Mode</Label>
           <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "collaborative" | "team")}>
             <option value="single">Single agent</option>
@@ -441,6 +464,210 @@ function IntegrationRow(props: { item: IntegrationView; first: boolean; refresh:
           <a href={item.docsUrl}>Official docs</a>
         </div>
       </details>
+    </div>
+  );
+}
+
+const BOT_CHOICES: { agentId: string; name: string; job: string }[] = [
+  { agentId: "claude-web", name: "Relay-Claude", job: "Careful writing, analysis and reviewing other bots' work." },
+  { agentId: "chatgpt-web", name: "Relay-ChatGPT", job: "General help: drafts, ideas, explanations and planning." },
+  { agentId: "gemini-web", name: "Relay-Gemini", job: "Research with Google knowledge, summaries and comparisons." },
+  { agentId: "grok-web", name: "Relay-Grok", job: "Current events, X/Twitter context and quick takes." },
+  { agentId: "perplexity-web", name: "Relay-Perplexity", job: "Web research with sources." },
+  { agentId: "claude-code", name: "Relay-ClaudeCode", job: "Writing and changing code in its project folder." },
+  { agentId: "cursor-cli", name: "Relay-Cursor", job: "Coding tasks with the Cursor agent." },
+];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function agentName(boot: Bootstrap, agentId: string): string {
+  return boot.integrations.find((item) => item.id === agentId)?.displayName ?? agentId;
+}
+
+function Bots(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onError: (message: string) => void; onOpen: (conversationId: string) => void }) {
+  const bots = props.boot.bots;
+  const taken = new Set(bots.map((bot) => bot.agentId + ":" + bot.name.toLowerCase()));
+  const available = BOT_CHOICES.filter((choice) => !bots.some((bot) => bot.name.toLowerCase() === choice.name.toLowerCase()));
+  const [picked, setPicked] = useState<string[]>(bots.length === 0 ? ["claude-web", "chatgpt-web", "grok-web"] : []);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [agentId, setAgentId] = useState("claude-web");
+  const [job, setJob] = useState("");
+  void taken;
+
+  async function addPicked() {
+    try {
+      for (const choice of available.filter((item) => picked.includes(item.agentId))) {
+        await api.createBot({ name: choice.name, agentId: choice.agentId, job: choice.job });
+      }
+      setPicked([]);
+      await props.refresh();
+    } catch (reason) {
+      props.onError(reason instanceof Error ? reason.message : "Could not add the bots.");
+    }
+  }
+
+  return (
+    <div className="scroll" style={{ padding: 20 }}>
+      <div style={{ display: "grid", gap: 22, maxWidth: 860 }}>
+        <div>
+          <h1 className="serif" style={{ fontWeight: 500, margin: 0 }}>Bots</h1>
+          <p style={{ margin: "4px 0 0", color: "var(--muted-foreground)" }}>
+            Each bot is one AI with its own chat, job and memory. Give it a daily schedule and it works in your cloud desktop even when your PC is off.
+          </p>
+        </div>
+
+        {available.length ? (
+          <section className="card" style={{ display: "grid", gap: 10 }}>
+            <strong>{bots.length === 0 ? "Choose your bots" : "Add more bots"}</strong>
+            <div style={{ display: "grid", gap: 6 }}>
+              {available.map((choice) => (
+                <label key={choice.agentId} className="row" style={{ gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(choice.agentId)}
+                    onChange={(event) => setPicked((current) => (event.target.checked ? [...current, choice.agentId] : current.filter((id) => id !== choice.agentId)))}
+                    style={{ marginTop: 4 }}
+                  />
+                  <span>
+                    <strong>{choice.name}</strong>
+                    <span style={{ color: "var(--muted-foreground)", fontSize: 13 }}> · {agentName(props.boot, choice.agentId)}</span>
+                    <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{choice.job}</div>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <Button size="sm" disabled={picked.length === 0} onClick={() => void addPicked()}>Add {picked.length || ""} bot{picked.length === 1 ? "" : "s"}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setCreating(true)}>+ Create your own</Button>
+            </div>
+          </section>
+        ) : (
+          <div><Button size="sm" variant="outline" onClick={() => setCreating(true)}>+ Create your own bot</Button></div>
+        )}
+
+        {creating ? (
+          <form
+            className="card"
+            style={{ display: "grid", gap: 8 }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              api.createBot({ name, agentId, job })
+                .then((bot) => { setName(""); setJob(""); setCreating(false); return props.refresh().then(() => props.onOpen(bot.conversationId)); })
+                .catch((reason) => props.onError(reason.message));
+            }}
+          >
+            <strong>New bot</strong>
+            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name, e.g. Relay-Outreach" required />
+            <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+              {BOT_CHOICES.map((choice) => <option key={choice.agentId} value={choice.agentId}>{agentName(props.boot, choice.agentId)}</option>)}
+            </select>
+            <Textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="Its job, e.g. Draft three replies to new posts in my X feed every morning." />
+            <div className="row" style={{ gap: 8 }}>
+              <Button type="submit" size="sm">Create bot</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
+            </div>
+          </form>
+        ) : null}
+
+        {bots.length ? (
+          <section style={{ display: "grid", gap: 8 }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Your bots</h2>
+            <div className="card" style={{ padding: 0, gap: 0 }}>
+              {bots.map((bot, index) => <BotRow key={bot.id} boot={props.boot} bot={bot} first={index === 0} refresh={props.refresh} onError={props.onError} onOpen={props.onOpen} />)}
+            </div>
+          </section>
+        ) : null}
+
+        <AlarmCard boot={props.boot} refresh={props.refresh} onError={props.onError} />
+      </div>
+    </div>
+  );
+}
+
+function AlarmCard(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onError: (message: string) => void }) {
+  const alarm = props.boot.alarm;
+  const scheduled = props.boot.bots.some((bot) => bot.schedule);
+  if (!scheduled && !alarm) return null;
+  return (
+    <section className="card" style={{ display: "grid", gap: 6 }}>
+      <strong>Wake-ups</strong>
+      <span style={{ fontSize: 13, color: alarm && !alarm.ok ? "var(--destructive)" : "var(--muted-foreground)" }}>
+        {alarm ? alarm.detail : props.boot.alarmAvailable ? "Setting up…" : "Wake-ups need Relay for Windows: open it, Continue with GitHub again to allow scheduled bots, and reopen your desktop."}
+      </span>
+      {alarm?.repoUrl ? <a href={alarm.repoUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>See the alarm in your GitHub account</a> : null}
+      {props.boot.alarmAvailable ? (
+        <div><Button size="sm" variant="ghost" onClick={() => api.syncAlarm().then(props.refresh).catch((reason) => props.onError(reason.message))}>Check again</Button></div>
+      ) : null}
+    </section>
+  );
+}
+
+function BotRow(props: { boot: Bootstrap; bot: Bootstrap["bots"][number]; first: boolean; refresh: () => Promise<unknown>; onError: (message: string) => void; onOpen: (conversationId: string) => void }) {
+  const bot = props.bot;
+  const [editing, setEditing] = useState(false);
+  const [job, setJob] = useState(bot.job);
+  const [memory, setMemory] = useState(bot.memory);
+  const [scheduled, setScheduled] = useState(Boolean(bot.schedule));
+  const [time, setTime] = useState(bot.schedule?.time ?? "08:00");
+  const [days, setDays] = useState<number[]>(bot.schedule?.days ?? [1, 2, 3, 4, 5]);
+  const [prompt, setPrompt] = useState(bot.schedule?.prompt ?? "");
+  const summary = bot.schedule ? `Every ${bot.schedule.days.length === 7 ? "day" : bot.schedule.days.map((day) => DAY_NAMES[day]).join(", ")} at ${bot.schedule.time}` : "No schedule";
+  return (
+    <div style={{ padding: "12px 16px", borderTop: props.first ? "none" : "1px solid var(--border)", display: "grid", gap: 8 }}>
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <strong>{bot.name}</strong>
+            <span className="badge">{agentName(props.boot, bot.agentId)}</span>
+            <span className={`badge ${bot.schedule ? "info" : ""}`}>{summary}</span>
+          </div>
+          {bot.job ? <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{bot.job}</div> : null}
+        </div>
+        <div className="row" style={{ gap: 4 }}>
+          <Button size="sm" onClick={() => props.onOpen(bot.conversationId)}>Chat</Button>
+          <Button size="sm" variant="outline" onClick={() => setEditing((value) => !value)}>{editing ? "Close" : "Edit"}</Button>
+        </div>
+      </div>
+      {editing ? (
+        <form
+          style={{ display: "grid", gap: 8 }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const schedule = scheduled ? { time, days, prompt, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : null;
+            api.updateBot(bot.id, { job, memory, schedule })
+              .then(() => { setEditing(false); return props.refresh(); })
+              .catch((reason) => props.onError(reason.message));
+          }}
+        >
+          <Label>Job</Label>
+          <Textarea value={job} onChange={(event) => setJob(event.target.value)} placeholder="What this bot is for" />
+          <Label>Memory</Label>
+          <Textarea value={memory} onChange={(event) => setMemory(event.target.value)} placeholder="Things it should always know, e.g. my audience, my tone, my projects" />
+          <label className="row" style={{ gap: 8 }}>
+            <input type="checkbox" checked={scheduled} onChange={(event) => setScheduled(event.target.checked)} />
+            Run on a schedule
+          </label>
+          {scheduled ? (
+            <>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <Input type="time" value={time} onChange={(event) => setTime(event.target.value)} style={{ width: 130 }} />
+                {DAY_NAMES.map((day, index) => (
+                  <Button key={day} type="button" size="sm" variant={days.includes(index) ? "default" : "outline"} onClick={() => setDays((current) => (current.includes(index) ? current.filter((item) => item !== index) : [...current, index]))}>
+                    {day}
+                  </Button>
+                ))}
+              </div>
+              <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What to do each time, e.g. Summarize today's AI news in 5 bullets." required />
+              <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>Times are in your time zone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). GitHub can start a few minutes late.</span>
+            </>
+          ) : null}
+          <div className="row" style={{ gap: 8 }}>
+            <Button type="submit" size="sm">Save</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => api.runBot(bot.id).then(() => props.onOpen(bot.conversationId)).catch((reason) => props.onError(reason.message))}>Run now</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => { if (confirm(`Remove ${bot.name}? Its chat stays under Projects → Bots.`)) api.deleteBot(bot.id).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>Remove</Button>
+          </div>
+        </form>
+      ) : null}
     </div>
   );
 }

@@ -22,7 +22,9 @@ const IDLE_MINUTES = 20;
 const RETENTION_MINUTES = 30 * 24 * 60;
 /** Wake the Codespace when it would be deleted within this window. */
 const KEEPALIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const SCOPE = "codespace";
+/** codespace: create/start the desktop. repo + workflow: the user's private "relay-alarm" repo that wakes it for scheduled bots. */
+const SCOPE = "codespace repo workflow";
+const TOKEN_SECRET = "RELAY_GITHUB_TOKEN";
 
 type Fetch = typeof fetch;
 
@@ -107,6 +109,21 @@ export class GitHubCodespaces {
     return this.api("/user");
   }
 
+  /** The OAuth scopes this token was granted. */
+  async scopes(): Promise<string[]> {
+    const response = await this.fetchImpl("https://api.github.com/user", {
+      headers: { accept: "application/vnd.github+json", authorization: `Bearer ${this.token}`, "x-github-api-version": "2022-11-28" },
+    });
+    if (response.status === 401) throw new RelayError("github_signed_out", "Your GitHub sign-in expired. Continue with GitHub again.", 401);
+    return (response.headers.get("x-oauth-scopes") ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  }
+
+  /** Lets Relay in the Codespace manage the wake-up alarm. Only when the token has the alarm scopes. */
+  private async shareToken(repositoryId: number): Promise<void> {
+    const scopes = await this.scopes().catch(() => [] as string[]);
+    if (scopes.includes("workflow") && scopes.includes("repo")) await this.setSecret(TOKEN_SECRET, this.token, repositoryId);
+  }
+
   async repoId(): Promise<number> {
     const repo = await this.api<{ id: number }>(`/repos/${RELAY_REPO.owner}/${RELAY_REPO.repo}`);
     return repo.id;
@@ -120,6 +137,7 @@ export class GitHubCodespaces {
     );
     const mine = list.codespaces.filter((item) => item.repository.id === repositoryId);
     const existing = mine.find((item) => item.display_name === DISPLAY_NAME) ?? mine[0];
+    await this.shareToken(repositoryId);
     if (existing) {
       if (["Shutdown", "ShuttingDown", "Stopped"].includes(existing.state)) {
         await this.api(`/user/codespaces/${existing.name}/start`, { method: "POST" });

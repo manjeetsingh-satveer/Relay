@@ -28,6 +28,8 @@ export interface AttemptRecord {
   requestId?: string;
 }
 
+import type { AlarmStatus, Bot } from "./bots.ts";
+
 export interface VaultItem {
   id: string;
   kind: "address" | "note";
@@ -46,6 +48,8 @@ export interface StoreData {
   artifacts: ArtifactRecord[];
   contacts: Contact[];
   vault: VaultItem[];
+  bots: Bot[];
+  alarm: AlarmStatus | null;
   settings: Settings;
   attempts: AttemptRecord[];
   vm: VmRecord | null;
@@ -84,6 +88,8 @@ export function emptyStore(): StoreData {
     artifacts: [],
     contacts: [],
     vault: [],
+    bots: [],
+    alarm: null,
     settings: structuredClone(DEFAULT_SETTINGS),
     attempts: [],
     vm: null,
@@ -127,6 +133,8 @@ export class Store {
     }
     data.settings = { ...structuredClone(DEFAULT_SETTINGS), ...data.settings, models: { ...DEFAULT_SETTINGS.models, ...data.settings?.models }, limits: { ...DEFAULT_SETTINGS.limits, ...data.settings?.limits } };
     data.vault ??= [];
+    data.bots ??= [];
+    data.alarm ??= null;
     let changed = false;
     for (const task of data.tasks) {
       if (task.status === "running") {
