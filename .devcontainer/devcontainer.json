@@ -1,20 +1,41 @@
 {
   "name": "Relay",
-  "build": { "dockerfile": "Dockerfile" },
-  "features": {
-    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  "build": {
+    "dockerfile": "Dockerfile"
   },
-  "hostRequirements": { "cpus": 2, "memory": "8gb", "storage": "32gb" },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
   "remoteUser": "vscode",
   "postCreateCommand": "bash scripts/codespace/setup.sh",
   "postStartCommand": "bash scripts/codespace/start.sh",
   "postAttachCommand": "bash scripts/codespace/welcome.sh",
-  "forwardPorts": [43123],
+  "forwardPorts": [
+    43123
+  ],
   "portsAttributes": {
-    "43123": { "label": "Relay", "onAutoForward": "openBrowser", "requireLocalPort": false }
+    "43123": {
+      "label": "Relay",
+      "onAutoForward": "openBrowser",
+      "requireLocalPort": false
+    }
   },
-  "otherPortsAttributes": { "onAutoForward": "ignore" },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
   "customizations": {
-    "codespaces": { "openFiles": ["docs/codespaces.md"] }
+    "codespaces": {
+      "openFiles": [
+        "docs/codespaces.md"
+      ]
+    }
   }
 }
