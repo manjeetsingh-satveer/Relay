@@ -1,0 +1,10 @@
+{
+  "name": "Relay",
+  "short_name": "Relay",
+  "description": "One chat across the AI tools you already pay for.",
+  "start_url": "/#chat",
+  "display": "standalone",
+  "background_color": "#12110e",
+  "theme_color": "#12110e",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

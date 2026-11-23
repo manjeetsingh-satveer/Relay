@@ -16,12 +16,15 @@ import { VmManager } from "../vm/manager.ts";
 import { preflight } from "../vm/qemu.ts";
 import { isInside } from "../vm/checksum.ts";
 import { attachVncProxy } from "./vnc.ts";
+import { Auth, clientIp, deviceLabel, sameOrigin } from "./auth.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
 import { openLoginPage } from "../browser/cdp.ts";
 import { siteById } from "../browser/sites.ts";
 import { beginProvision as defaultBeginProvision } from "../vm/provision-lock.ts";
 
 export interface ServerHandle {
+  /** Set only in login mode before the owner account exists. */
+  setupToken: string;
   port: number;
   store: Store;
   coordinator: Coordinator;
@@ -37,10 +40,19 @@ export async function startServer(options: {
   runtime?: AdapterRuntime;
   version?: string;
   beginProvision?: () => () => void;
+  /**
+   * Cloud mode: Relay runs on a Linux server whose own desktop, Chromium (CDP on 127.0.0.1:9222)
+   * and CLI helper (127.0.0.1:43125) are local. No QEMU VM is started; the Computer tab shows the
+   * server's desktop through the VNC server on this port.
+   */
+  cloudDesktop?: { vncPort: number };
+  /** Require the owner's password + authenticator code. On by default in cloud mode. */
+  requireLogin?: boolean;
 }): Promise<ServerHandle> {
   const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
   const store = await Store.open(options.dataDir);
+  const auth = await Auth.open(options.dataDir, options.requireLogin ?? Boolean(options.cloudDesktop));
   // Give every install a ready-to-use "General" chat so people can type without creating a project.
   if (store.data.projects.length === 0) {
     const now = new Date().toISOString();
@@ -70,14 +82,62 @@ export async function startServer(options: {
     }
   });
 
-  attachVncProxy(server, async () => ({
-    record: store.data.vm,
-    running: store.data.vm ? await vm.isAlive(store.data.vm) : false,
-  }));
+  attachVncProxy(
+    server,
+    async () => {
+      if (options.cloudDesktop) return options.cloudDesktop.vncPort;
+      const record = store.data.vm;
+      return record?.vncPort && (await vm.isAlive(record)) ? record.vncPort : null;
+    },
+    (request) => auth.check(request) && sameOrigin(request),
+  );
 
   async function route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const method = request.method ?? "GET";
+    if (auth.required) {
+      response.setHeader("x-frame-options", "DENY");
+      response.setHeader("referrer-policy", "no-referrer");
+      if (method !== "GET" && !sameOrigin(request)) throw new RelayError("bad_origin", "Blocked a request from another site.", 403);
+    }
+    if (url.pathname.startsWith("/api/auth/")) {
+      if (method === "GET" && url.pathname === "/api/auth/state") return send(response, 200, auth.state(request));
+      if (method === "POST" && url.pathname === "/api/auth/setup") {
+        const body = await json(request);
+        return send(response, 200, await auth.beginSetup({ setupToken: stringField(body, "setupToken") ?? "", password: typeof body.password === "string" ? body.password : "" }));
+      }
+      if (method === "POST" && url.pathname === "/api/auth/setup/confirm") {
+        const body = await json(request);
+        const result = await auth.confirmSetup({ code: stringField(body, "code") ?? "", device: deviceLabel(request) });
+        response.setHeader("set-cookie", auth.cookieHeader(result.cookie, request));
+        return send(response, 200, { recoveryCodes: result.recoveryCodes });
+      }
+      if (method === "POST" && url.pathname === "/api/auth/login") {
+        const body = await json(request);
+        const token = await auth.login({
+          password: typeof body.password === "string" ? body.password : "",
+          code: stringField(body, "code") ?? "",
+          ip: clientIp(request),
+          device: deviceLabel(request),
+        });
+        response.setHeader("set-cookie", auth.cookieHeader(token, request));
+        return send(response, 200, { ok: true });
+      }
+      if (method === "POST" && url.pathname === "/api/auth/logout") {
+        if (!auth.check(request)) return send(response, 200, { ok: true });
+        const body = await json(request).catch(() => ({}) as Record<string, unknown>);
+        response.setHeader("set-cookie", await auth.logout(request, body.everywhere === true));
+        return send(response, 200, { ok: true });
+      }
+      if (method === "GET" && url.pathname === "/api/auth/sessions") {
+        if (!auth.check(request)) throw new RelayError("unauthorized", "Sign in first.", 401);
+        return send(response, 200, { sessions: auth.sessions(), recoveryCodesLeft: auth.recoveryCodesLeft() });
+      }
+      throw new RelayError("not_found", "Not found.", 404);
+    }
+    if (url.pathname.startsWith("/api/") && url.pathname !== "/api/health" && !auth.check(request)) {
+      throw new RelayError("unauthorized", "Sign in first.", 401);
+    }
     if (method === "GET" && url.pathname === "/api/events") {
       response.writeHead(200, {
         "content-type": "text/event-stream",
@@ -470,6 +530,7 @@ export async function startServer(options: {
   }
 
   async function vmState() {
+    if (options.cloudDesktop) return { record: null, process: "running" as const, cloud: true };
     const record = store.data.vm;
     let processState: "absent" | "running" = "absent";
     if (record && (await vm.isAlive(record))) processState = "running";
@@ -482,6 +543,7 @@ export async function startServer(options: {
   return {
     port,
     store,
+    setupToken: auth.setupTokenForLog,
     coordinator,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
@@ -508,6 +570,7 @@ function contentType(file: string): string {
   if (file.endsWith(".css")) return "text/css";
   if (file.endsWith(".html")) return "text/html; charset=utf-8";
   if (file.endsWith(".svg")) return "image/svg+xml";
+  if (file.endsWith(".webmanifest")) return "application/manifest+json";
   if (file.endsWith(".png")) return "image/png";
   return "application/octet-stream";
 }

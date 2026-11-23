@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/dialog";
 import { api, type Bootstrap, type ConversationPayload } from "@/lib/api";
 import { formatBytes, formatWhen } from "@/lib/utils";
+import { AccountCard } from "./Auth";
 
 type Tab = "chat" | "integrations" | "computer" | "calls" | "settings";
 
@@ -70,7 +71,7 @@ export function App() {
             <span>One chat across the tools you already pay for.</span>
           </div>
           <div className="nav">
-            {(["chat", "integrations", "computer", "calls", "settings"] as Tab[]).map((item) => (
+            {(["chat", "computer", "integrations", "settings"] as Tab[]).map((item) => (
               <Button key={item} size="sm" variant={tab === item ? "default" : "outline"} onClick={() => { location.hash = item; setTab(item); }}>
                 {item}
               </Button>
@@ -87,7 +88,6 @@ export function App() {
               refresh={reload}
             />
           </div>
-          <p style={{ padding: 12, color: "var(--muted-foreground)", fontSize: 12 }}>{boot.health.secretStorageDetail}</p>
         </aside>
         <main className="main">
           {error ? <p style={{ padding: "8px 16px", color: "var(--destructive)" }}>{error}</p> : null}
@@ -129,10 +129,37 @@ function Projects(props: {
 }) {
   const [name, setName] = useState("");
   const [repo, setRepo] = useState("");
+  const [adding, setAdding] = useState(false);
   const conversations = props.boot.conversations.filter((item) => item.projectId === props.projectId);
   return (
     <div className="grid-cards">
-      <form
+      {props.projectId ? (
+        <Button
+          size="sm"
+          onClick={async () => {
+            const conversation = await api.createConversation(props.projectId!);
+            props.onConversation(conversation.id);
+            await props.refresh();
+          }}
+        >
+          + New chat
+        </Button>
+      ) : null}
+      <div style={{ display: "grid", gap: 2 }}>
+        {[...conversations].reverse().map((conversation) => (
+          <button key={conversation.id} onClick={() => props.onConversation(conversation.id)} style={{ background: props.conversationId === conversation.id ? "var(--card)" : "transparent", border: 0, borderRadius: 8, textAlign: "left", color: props.conversationId === conversation.id ? "var(--primary)" : "inherit", padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {conversation.title}
+          </button>
+        ))}
+      </div>
+      <Label style={{ marginTop: 12 }}>Projects</Label>
+      {props.boot.projects.map((project) => (
+        <button key={project.id} onClick={() => props.onProject(project.id)} style={{ background: "transparent", border: 0, textAlign: "left", padding: "4px 8px", color: props.projectId === project.id ? "var(--primary)" : "inherit" }}>
+          {project.name}
+        </button>
+      ))}
+      {!adding ? <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>+ New project</Button> : null}
+      {adding ? <form
         className="grid-cards"
         onSubmit={async (event) => {
           event.preventDefault();
@@ -141,42 +168,20 @@ function Projects(props: {
             setName("");
             setRepo("");
             props.onProject(project.id);
+            setAdding(false);
             await props.refresh();
           } catch (reason) {
             props.onError(reason instanceof Error ? reason.message : "Could not create the project.");
           }
         }}
       >
-        <Label>New project</Label>
-        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Portfolio site" required />
-        <Input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder="Repository URL, optional" />
-        <Button type="submit" size="sm">Create project</Button>
-      </form>
-      {props.boot.projects.length === 0 ? <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>No projects yet.</p> : null}
-      {props.boot.projects.map((project) => (
-        <button key={project.id} className="card" onClick={() => props.onProject(project.id)} style={{ borderColor: props.projectId === project.id ? "var(--primary)" : undefined }}>
-          <strong>{project.name}</strong>
-          <div style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{project.repoUrl || "No repository URL"}</div>
-        </button>
-      ))}
-      {props.projectId ? (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={async () => {
-            const conversation = await api.createConversation(props.projectId!);
-            props.onConversation(conversation.id);
-            await props.refresh();
-          }}
-        >
-          New conversation
-        </Button>
-      ) : null}
-      {conversations.map((conversation) => (
-        <button key={conversation.id} onClick={() => props.onConversation(conversation.id)} style={{ background: "transparent", border: 0, color: props.conversationId === conversation.id ? "var(--primary)" : "inherit", padding: "4px 0" }}>
-          {conversation.title}
-        </button>
-      ))}
+        <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" required autoFocus />
+        <Input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder="GitHub repo URL (optional)" />
+        <div className="row">
+          <Button type="submit" size="sm">Create</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+        </div>
+      </form> : null}
     </div>
   );
 }
@@ -391,6 +396,7 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   const [fullscreen, setFullscreen] = useState(false);
   const record = props.boot.vm.record;
   const running = props.boot.vm.process === "running";
+  const cloud = Boolean(props.boot.vm.cloud);
 
   useEffect(() => {
     if (!running) return;
@@ -454,10 +460,10 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
-      <p style={{ maxWidth: 760 }}>Your private Linux desktop. Sign in to each AI app here; Relay never sees or types your passwords.</p>
+      <p style={{ maxWidth: 760 }}>{cloud ? "Your cloud desktop. It keeps running when your laptop is off." : "Your private Linux desktop."} Sign in to each AI app here; Relay never sees or types your passwords.</p>
       <div className="row">
-        <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button>
-        {!record ? <Button disabled={provisioning} onClick={() => {
+        {!record && !cloud ? <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button> : null}
+        {!record && !cloud ? <Button disabled={provisioning} onClick={() => {
           if (holdingProvision.current) return;
           holdingProvision.current = true;
           setProvisioning(true);
@@ -476,13 +482,11 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
             });
         }}>{provisioning ? "Provisioning…" : "Download and provision"}</Button> : null}
         {record && !running ? <Button onClick={() => api.vmAction("start").then(props.refresh).catch((reason) => props.onError(reason.message))}>Start</Button> : null}
-        {running ? <Button variant="outline" onClick={() => api.vmAction("shutdown").then(props.refresh).catch((reason) => props.onError(reason.message))}>Shut down</Button> : null}
-        {running ? <Button variant="outline" onClick={() => api.vmAction("pause").catch((reason) => props.onError(reason.message))}>Pause</Button> : null}
-        {record ? <Button variant="outline" onClick={() => api.vmAction("resume").then(props.refresh).catch((reason) => props.onError(reason.message))}>Resume</Button> : null}
+        {running && !cloud ? <Button variant="outline" onClick={() => api.vmAction("shutdown").then(props.refresh).catch((reason) => props.onError(reason.message))}>Shut down</Button> : null}
         {running ? <Button onClick={() => frame.current?.requestFullscreen().catch((reason) => props.onError(reason instanceof Error ? reason.message : "Full screen failed."))}>Full screen</Button> : null}
-        {running ? <Button variant="danger" onClick={() => api.vmAction("force-stop").then(props.refresh).catch((reason) => props.onError(reason.message))}>Force stop</Button> : null}
+        {running && !cloud ? <Button variant="danger" onClick={() => api.vmAction("force-stop").then(props.refresh).catch((reason) => props.onError(reason.message))}>Force stop</Button> : null}
       </div>
-      {!record ? (
+      {!record && !cloud ? (
         <div className="card" style={{ marginTop: 12 }}>
           <label className="row"><input type="checkbox" checked={allowTcg} onChange={(event) => setAllowTcg(event.target.checked)} /> Allow software emulation if hardware virtualization is missing</label>
           <label className="row"><input type="checkbox" checked={lowMemory} onChange={(event) => setLowMemory(event.target.checked)} /> Continue even if the OS reports less than 1.5 GB available</label>
@@ -510,21 +514,20 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
         style={fullscreen ? { background: "#000", width: "100vw", height: "100vh" } : { marginTop: 12 }}
         onMouseEnter={() => viewer.current?.focus()}
       >
-        <div id="screen" ref={screen} style={fullscreen ? { width: "100%", height: "100%" } : undefined} />
+        <div id="screen" ref={screen} style={fullscreen ? { width: "100%", height: "100%", maxWidth: "none", aspectRatio: "auto" } : undefined} />
       </div>
-      {running ? <p>Click the display to use the mouse and keyboard. Press Esc to leave full screen.</p> : <p>The display stays blank until the VM is running.</p>}
+      {running ? <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginTop: 6 }}>Click the screen to use your mouse and keyboard. Esc leaves full screen.</p> : <p>The display stays blank until the VM is running.</p>}
       {record ? (
-        <p style={{ marginTop: 12, color: "var(--muted-foreground)", fontSize: 13 }}>VM user <code>relay</code>, password <code>{record.guestPassword}</code> (only needed for sudo prompts). Status: {props.boot.vm.process}, {record.accel}.</p>
-      ) : null}
-      {record ? (
-        <form className="card" style={{ marginTop: 12 }} onSubmit={(event) => { event.preventDefault(); api.share(share, writable).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>
-          <Label>Share one host folder</Label>
+        <details className="card" style={{ marginTop: 12 }}>
+        <summary>Share a folder from this PC</summary>
+        <form style={{ display: "grid", gap: 8, marginTop: 8 }} onSubmit={(event) => { event.preventDefault(); api.share(share, writable).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>
           <Input value={share} onChange={(event) => setShare(event.target.value)} placeholder="Absolute path" />
           <label className="row"><input type="checkbox" checked={writable} onChange={(event) => setWritable(event.target.checked)} /> Allow the guest to write</label>
           <Button type="submit" size="sm">Attach on next start</Button>
           <Button type="button" size="sm" variant="ghost" onClick={() => api.unshare().then(props.refresh)}>Stop sharing</Button>
-          <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Nothing else on the host is mounted. Inside the guest, after the next boot: <code>sudo mkdir -p /mnt/host && sudo mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host</code></p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Only this folder is shared. Inside the VM, after the next start: <code>sudo mkdir -p /mnt/host && sudo mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host</code></p>
         </form>
+        </details>
       ) : null}
     </div>
   );
@@ -583,6 +586,7 @@ function SettingsPanel(props: { boot: Bootstrap; refresh: () => Promise<unknown>
         api.settings(settings).then(props.refresh).catch((reason) => props.onError(reason.message));
       }}
     >
+      <AccountCard />
       <h1 className="serif" style={{ fontWeight: 500 }}>Limits</h1>
       <p>Relay stops after these limits. It does not invent a dollar cost. A spending cap blocks the next call when a provider omitted a cost.</p>
       <Label>Router</Label>

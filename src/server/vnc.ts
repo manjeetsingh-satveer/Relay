@@ -1,11 +1,11 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import net from "node:net";
 import type { Server } from "node:http";
-import type { VmRecord } from "../shared/types.ts";
 
 export function attachVncProxy(
   server: Server,
-  current: () => Promise<{ record: VmRecord | null; running: boolean }>,
+  currentPort: () => Promise<number | null>,
+  authorize: (request: import("node:http").IncomingMessage) => boolean = () => true,
 ): void {
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", async (request, socket, head) => {
@@ -15,12 +15,16 @@ export function attachVncProxy(
         socket.destroy();
         return;
       }
-      const { record, running } = await current();
-      if (!record?.vncPort || !running) {
+      if (!authorize(request)) {
         socket.destroy();
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => bridge(ws, record.vncPort!));
+      const port = await currentPort();
+      if (!port) {
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(request, socket, head, (ws) => bridge(ws, port));
     } catch {
       socket.destroy();
     }

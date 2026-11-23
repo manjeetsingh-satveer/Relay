@@ -13,8 +13,9 @@ if command -v grok-bot >/dev/null 2>&1; then
 fi
 find_deb() { ls -t "$DOWNLOADS"/*rok*bot*.deb "$DOWNLOADS"/*rok-bot*.deb 2>/dev/null | head -n 1; }
 DEB="$(find_deb || true)"
-if [ -z "$DEB" ]; then
-  # xAI's "Download for Linux" link on x.ai/bot (official .deb on downloads.cursor.com).
+if [ -z "$DEB" ] && [ "$(uname -m)" = "x86_64" ]; then
+  # xAI's "Download for Linux" link on x.ai/bot (official x64 .deb on downloads.cursor.com).
+  # Arm64 servers (Oracle Ampere) fall through to the download page below.
   if curl -fL --retry 2 -o "$DOWNLOADS/grok-bot_amd64.deb" \
     "https://api2.cursor.sh/updates/download/stable/linux-x64/grok-bot-fb0a830618be0c54"; then
     DEB="$DOWNLOADS/grok-bot_amd64.deb"

@@ -231,6 +231,8 @@ export interface VmView {
   record: VmRecord | null;
   process: "absent" | "running" | "paused";
   preflight?: PreflightReport;
+  /** True when Relay runs on a cloud server and shows that server's own desktop (no local VM). */
+  cloud?: boolean;
 }
 
 export interface HealthInfo {

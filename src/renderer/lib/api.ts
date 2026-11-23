@@ -25,11 +25,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T;
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    // Session expired or signed out elsewhere: the login gate listens for this and shows sign-in.
+    if (response.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event("relay-unauthorized"));
     const message = body?.error?.message || `Request failed (${response.status})`;
     throw new Error(message);
   }
   return body as T;
 }
+
+export interface AuthState {
+  required: boolean;
+  configured: boolean;
+  authenticated: boolean;
+}
+
+export const authApi = {
+  state: () => request<AuthState>("/api/auth/state"),
+  beginSetup: (setupToken: string, password: string) =>
+    request<{ secret: string; uri: string; qrSvg: string }>("/api/auth/setup", { method: "POST", body: JSON.stringify({ setupToken, password }) }),
+  confirmSetup: (code: string) =>
+    request<{ recoveryCodes: string[] }>("/api/auth/setup/confirm", { method: "POST", body: JSON.stringify({ code }) }),
+  login: (password: string, code: string) =>
+    request<{ ok: true }>("/api/auth/login", { method: "POST", body: JSON.stringify({ password, code }) }),
+  logout: (everywhere = false) => request<{ ok: true }>("/api/auth/logout", { method: "POST", body: JSON.stringify({ everywhere }) }),
+  sessions: () =>
+    request<{ sessions: { createdAt: string; lastSeen: string; device: string }[]; recoveryCodesLeft: number }>("/api/auth/sessions"),
+};
 
 export const api = {
   bootstrap: () => request<Bootstrap>("/api/bootstrap"),
