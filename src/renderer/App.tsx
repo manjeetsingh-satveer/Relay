@@ -9,12 +9,12 @@ import { api, type Bootstrap, type ConversationPayload } from "@/lib/api";
 import { formatBytes, formatWhen } from "@/lib/utils";
 import { AccountCard } from "./Auth";
 
-type Tab = "chat" | "integrations" | "computer" | "calls" | "settings";
+type Tab = "chat" | "integrations" | "computer" | "vault" | "calls" | "settings";
 
 export function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const initialTab = (["chat", "integrations", "computer", "calls", "settings"] as Tab[]).includes(location.hash.slice(1) as Tab)
+  const initialTab = (["chat", "integrations", "computer", "vault", "calls", "settings"] as Tab[]).includes(location.hash.slice(1) as Tab)
     ? (location.hash.slice(1) as Tab)
     : "chat";
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -71,7 +71,7 @@ export function App() {
             <span>One chat across the tools you already pay for.</span>
           </div>
           <div className="nav">
-            {(["chat", "computer", "integrations", "settings"] as Tab[]).map((item) => (
+            {(["chat", "computer", "vault", "integrations", "settings"] as Tab[]).map((item) => (
               <Button key={item} size="sm" variant={tab === item ? "default" : "outline"} onClick={() => { location.hash = item; setTab(item); }}>
                 {item}
               </Button>
@@ -105,6 +105,7 @@ export function App() {
             />
           ) : null}
           {tab === "integrations" ? <Integrations boot={boot} refresh={reload} onError={setError} /> : null}
+          {tab === "vault" ? <Vault boot={boot} refresh={reload} onError={setError} onOpenComputer={() => { location.hash = "computer"; setTab("computer"); }} /> : null}
           {tab === "computer" ? <Computer boot={boot} refresh={reload} onError={setError} /> : null}
           {tab === "calls" ? <Calls boot={boot} pending={call} refresh={reload} onError={setError} onClear={() => setCall(null)} /> : null}
           {tab === "settings" ? <SettingsPanel boot={boot} refresh={reload} onError={setError} /> : null}
@@ -293,6 +294,12 @@ function Chat(props: {
             <option value="team">Team: agents discuss, lead answers</option>
             <option value="collaborative">Draft, review, revise</option>
           </select>
+          {props.boot.vault.length ? (
+            <select value="" onChange={(event) => { const item = props.boot.vault.find((entry) => entry.id === event.target.value); if (item) setText((current) => (current ? current + "\n" : "") + item.value); }}>
+              <option value="">Insert from vault…</option>
+              {props.boot.vault.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          ) : null}
           <Label>Agent</Label>
           <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
             <option value="auto">Auto</option>
@@ -434,6 +441,74 @@ function IntegrationRow(props: { item: IntegrationView; first: boolean; refresh:
           <a href={item.docsUrl}>Official docs</a>
         </div>
       </details>
+    </div>
+  );
+}
+
+function Vault(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onError: (message: string) => void; onOpenComputer: () => void }) {
+  const [kind, setKind] = useState<"address" | "note">("address");
+  const [label, setLabel] = useState("");
+  const [value, setValue] = useState("");
+  const items = props.boot.vault;
+  const group = (title: string, list: typeof items) =>
+    list.length ? (
+      <section style={{ display: "grid", gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{title}</h2>
+        <div className="card" style={{ padding: 0, gap: 0 }}>
+          {list.map((item, index) => (
+            <div key={item.id} className="row" style={{ padding: "12px 16px", borderTop: index ? "1px solid var(--border)" : "none", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <strong>{item.label}</strong>
+                <div style={{ whiteSpace: "pre-wrap", color: "var(--muted-foreground)", fontSize: 13 }}>{item.value}</div>
+              </div>
+              <div className="row" style={{ gap: 4 }}>
+                <Button size="sm" variant="outline" onClick={() => void navigator.clipboard?.writeText(item.value)}>Copy</Button>
+                <Button size="sm" variant="ghost" onClick={() => api.deleteVaultItem(item.id).then(props.refresh).catch((reason) => props.onError(reason.message))}>Remove</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    ) : null;
+  return (
+    <div className="scroll" style={{ padding: 20 }}>
+      <div style={{ display: "grid", gap: 22, maxWidth: 860 }}>
+        <div>
+          <h1 className="serif" style={{ fontWeight: 500, margin: 0 }}>Vault</h1>
+          <p style={{ margin: "4px 0 0", color: "var(--muted-foreground)" }}>Addresses and notes you reuse. Pick one from <strong>Insert from vault</strong> in chat, and it's added to your message so the AI can use it.</p>
+        </div>
+        <div className="card" style={{ display: "grid", gap: 8 }}>
+          <strong>Passwords and cards</strong>
+          <span style={{ color: "var(--muted-foreground)", fontSize: 13 }}>
+            These stay in <strong>Bitwarden</strong>, the free password manager in your cloud desktop's browser. Click its icon in the browser toolbar, unlock it, and autofill when a site asks. Relay never sees or types them.
+          </span>
+          <div><Button size="sm" variant="outline" onClick={props.onOpenComputer}>Open my desktop</Button></div>
+        </div>
+        <form
+          className="card"
+          style={{ display: "grid", gap: 8 }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            api.addVaultItem(kind, label, value)
+              .then(() => { setLabel(""); setValue(""); return props.refresh(); })
+              .catch((reason) => props.onError(reason.message));
+          }}
+        >
+          <div className="row" style={{ gap: 8 }}>
+            <strong style={{ flex: 1 }}>Add</strong>
+            <select value={kind} onChange={(event) => setKind(event.target.value as "address" | "note")}>
+              <option value="address">Address</option>
+              <option value="note">Note</option>
+            </select>
+          </div>
+          <Input value={label} onChange={(event) => setLabel(event.target.value)} placeholder={kind === "address" ? "Name, e.g. Home" : "Title, e.g. My bio"} required />
+          <Textarea value={value} onChange={(event) => setValue(event.target.value)} placeholder={kind === "address" ? "Full name, street, city, postcode, country, phone" : "Anything you reuse often (no passwords or card numbers)"} required />
+          <div><Button type="submit" size="sm">Save</Button></div>
+        </form>
+        {group("Addresses", items.filter((item) => item.kind === "address"))}
+        {group("Notes", items.filter((item) => item.kind === "note"))}
+        {items.length === 0 ? <p style={{ color: "var(--muted-foreground)", margin: 0 }}>Nothing saved yet.</p> : null}
+      </div>
     </div>
   );
 }

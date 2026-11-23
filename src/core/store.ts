@@ -28,6 +28,14 @@ export interface AttemptRecord {
   requestId?: string;
 }
 
+export interface VaultItem {
+  id: string;
+  kind: "address" | "note";
+  label: string;
+  value: string;
+  createdAt: string;
+}
+
 export interface StoreData {
   version: 1;
   projects: Project[];
@@ -37,6 +45,7 @@ export interface StoreData {
   submissions: Submission[];
   artifacts: ArtifactRecord[];
   contacts: Contact[];
+  vault: VaultItem[];
   settings: Settings;
   attempts: AttemptRecord[];
   vm: VmRecord | null;
@@ -74,6 +83,7 @@ export function emptyStore(): StoreData {
     submissions: [],
     artifacts: [],
     contacts: [],
+    vault: [],
     settings: structuredClone(DEFAULT_SETTINGS),
     attempts: [],
     vm: null,
@@ -116,6 +126,7 @@ export class Store {
       }
     }
     data.settings = { ...structuredClone(DEFAULT_SETTINGS), ...data.settings, models: { ...DEFAULT_SETTINGS.models, ...data.settings?.models }, limits: { ...DEFAULT_SETTINGS.limits, ...data.settings?.limits } };
+    data.vault ??= [];
     let changed = false;
     for (const task of data.tasks) {
       if (task.status === "running") {

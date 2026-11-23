@@ -182,6 +182,7 @@ export async function startServer(options: {
         projects: store.data.projects,
         conversations: store.data.conversations,
         contacts: store.data.contacts,
+        vault: store.data.vault,
         integrations: views,
         vm: vmView,
       });
@@ -385,6 +386,28 @@ export async function startServer(options: {
       createReadStream(file).pipe(response);
       return;
     }
+    if (method === "POST" && url.pathname === "/api/vault") {
+      const body = await json(request);
+      const kind = stringField(body, "kind") === "address" ? "address" : "note";
+      const label = stringField(body, "label")?.trim();
+      const value = stringField(body, "value")?.trim();
+      if (!label || !value) throw new RelayError("invalid", "A name and the details are required.");
+      if (label.length > 200 || value.length > 5000) throw new RelayError("invalid", "That item is too long.");
+      const secret = looksSecret(value);
+      if (secret) throw new RelayError("invalid", `This looks like ${secret}. Keep passwords and cards in the password manager in your cloud desktop, not in Relay's vault.`);
+      const item = { id: createId(), kind, label, value, createdAt: new Date().toISOString() } as const;
+      await store.update((data) => data.vault.push({ ...item }));
+      notify();
+      return send(response, 201, item);
+    }
+    const vaultMatch = url.pathname.match(/^\/api\/vault\/([^/]+)$/);
+    if (method === "DELETE" && vaultMatch) {
+      await store.update((data) => {
+        data.vault = data.vault.filter((item) => item.id !== vaultMatch[1]);
+      });
+      notify();
+      return send(response, 204, null);
+    }
     if (method === "GET" && url.pathname === "/api/contacts") return send(response, 200, store.data.contacts);
     if (method === "POST" && url.pathname === "/api/contacts") {
       const body = await json(request);
@@ -553,4 +576,20 @@ function numberOr(value: unknown, fallback: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/** Relay's vault is for addresses and notes only. Refuse anything that looks like a card number or password. */
+export function looksSecret(value: string): string | null {
+  for (const match of value.match(/(?:\d[ -]?){13,19}/g) ?? []) {
+    const digits = match.replace(/\D/g, "");
+    let sum = 0;
+    for (let i = 0; i < digits.length; i++) {
+      let d = Number(digits[digits.length - 1 - i]);
+      if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+    }
+    if (digits.length >= 13 && sum % 10 === 0) return "a card number";
+  }
+  if (/\b(password|passwd|passcode|pin|cvv|cvc|ssn|social security)\b\s*[:=]/i.test(value)) return "a password or other secret";
+  return null;
 }

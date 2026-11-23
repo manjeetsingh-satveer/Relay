@@ -20,6 +20,11 @@ exec chromium $RELAY_CHROME_FLAGS --user-data-dir="$HOME/relay-chrome-profile" -
 EOF
 sudo chmod 755 /usr/local/bin/relay-open
 
+log "Adding the Bitwarden password manager to Chromium"
+# Passwords and cards live in Bitwarden (the user unlocks and autofills it themselves), never in Relay.
+sudo install -d /etc/chromium/policies/managed
+echo "{\"ExtensionInstallForcelist\":[\"nngceckbapebfimnlniiiahkandclblb;https://clients2.google.com/service/update2/crx\"]}" | sudo tee /etc/chromium/policies/managed/relay-bitwarden.json >/dev/null
+
 log "Setting up the desktop"
 mkdir -p "$HOME/.config/autostart" "$HOME/Desktop" "$HOME/relay-chrome-profile" "$HOME/relay-data" "$HOME/.vnc"
 entry() { # file name exec [icon]

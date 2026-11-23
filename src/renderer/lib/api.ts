@@ -6,6 +6,7 @@ export interface Bootstrap {
   projects: { id: string; name: string; repoUrl?: string; createdAt: string }[];
   conversations: { id: string; projectId: string; title: string; createdAt: string; updatedAt: string }[];
   contacts: { id: string; name: string; phone: string; notes: string; createdAt: string }[];
+  vault: { id: string; kind: "address" | "note"; label: string; value: string; createdAt: string }[];
   integrations: IntegrationView[];
   vm: VmView;
 }
@@ -80,6 +81,9 @@ export const api = {
     request<{ ok: boolean; detail: string }>(`/api/integrations/${id}/probe`, { method: "POST", body: JSON.stringify({ kind }) }),
   addContact: (name: string, phone: string, notes: string) =>
     request("/api/contacts", { method: "POST", body: JSON.stringify({ name, phone, notes }) }),
+  addVaultItem: (kind: "address" | "note", label: string, value: string) =>
+    request("/api/vault", { method: "POST", body: JSON.stringify({ kind, label, value }) }),
+  deleteVaultItem: (id: string) => request(`/api/vault/${id}`, { method: "DELETE" }),
   deleteContact: (id: string) => request(`/api/contacts/${id}`, { method: "DELETE" }),
   confirmCall: (contactId: string) =>
     request<{ placed: boolean; detail: string; contact: { name: string; phone: string } }>("/api/calls", {
