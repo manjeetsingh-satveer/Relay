@@ -57,6 +57,35 @@ EOF
 sudo chmod 755 /usr/local/bin/relay-grok-bot
 entry "$HOME/Desktop/relay-grok-bot.desktop" "Grok Bot" /usr/local/bin/relay-grok-bot grok-bot
 entry "$HOME/.config/autostart/relay-grok-bot.desktop" "Grok Bot" /usr/local/bin/relay-grok-bot
+# Sign-in links open in Relay's Chromium, and grokbot:// return links go back to Grok Bot.
+sudo tee /usr/local/bin/relay-browser >/dev/null <<'EOF'
+#!/bin/sh
+exec chromium $RELAY_CHROME_FLAGS --user-data-dir="$HOME/relay-chrome-profile" "$@"
+EOF
+sudo chmod 755 /usr/local/bin/relay-browser
+mkdir -p "$HOME/.local/share/applications"
+cat > "$HOME/.local/share/applications/relay-browser.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Relay Browser
+Exec=/usr/local/bin/relay-browser %u
+Icon=web-browser
+Terminal=false
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;
+Categories=Network;WebBrowser;
+EOF
+cat > "$HOME/.local/share/applications/relay-grok-bot-handler.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Grok Bot (Relay)
+Exec=/usr/local/bin/relay-grok-bot %U
+Icon=grok-bot
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/grokbot;x-scheme-handler/sand;
+EOF
+xdg-mime default relay-browser.desktop x-scheme-handler/http x-scheme-handler/https text/html
+xdg-mime default relay-grok-bot-handler.desktop x-scheme-handler/grokbot x-scheme-handler/sand
 chmod 755 "$HOME"/Desktop/*.desktop
 cat > "$HOME/.vnc/xstartup" <<'EOF'
 #!/bin/sh
