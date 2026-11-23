@@ -84,6 +84,20 @@ Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/grokbot;x-scheme-handler/sand;
 EOF
+# XFCE opens links with its own "preferred browser" (exo-open), so set that too.
+mkdir -p "$HOME/.local/share/xfce4/helpers" "$HOME/.config/xfce4"
+cat > "$HOME/.local/share/xfce4/helpers/relay-browser.desktop" <<'EOF'
+[Desktop Entry]
+NoDisplay=true
+Version=1.0
+Type=X-XFCE-Helper
+X-XFCE-Category=WebBrowser
+X-XFCE-Commands=/usr/local/bin/relay-browser
+X-XFCE-CommandsWithParameter=/usr/local/bin/relay-browser "%s"
+Icon=web-browser
+Name=Relay Browser
+EOF
+echo "WebBrowser=relay-browser" >> "$HOME/.config/xfce4/helpers.rc"
 xdg-mime default relay-browser.desktop x-scheme-handler/http x-scheme-handler/https text/html
 xdg-mime default relay-grok-bot-handler.desktop x-scheme-handler/grokbot x-scheme-handler/sand
 chmod 755 "$HOME"/Desktop/*.desktop
