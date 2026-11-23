@@ -60,7 +60,7 @@ export const api = {
   createConversation: (projectId: string) =>
     request<Bootstrap["conversations"][number]>("/api/conversations", { method: "POST", body: JSON.stringify({ projectId }) }),
   conversation: (id: string) => request<ConversationPayload>(`/api/conversations/${id}`),
-  send: (id: string, body: { text: string; mode: "single" | "collaborative"; idempotencyKey: string; agentId?: string }) =>
+  send: (id: string, body: { text: string; mode: "single" | "collaborative" | "team"; idempotencyKey: string; agentId?: string }) =>
     request<{ task: TaskRecord | null; call: CallResolution | null }>(`/api/conversations/${id}/messages`, {
       method: "POST",
       body: JSON.stringify(body),

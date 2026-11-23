@@ -18,7 +18,7 @@ import type { ArtifactRecord, IntegrationId, IntegrationView, TaskRecord } from 
 export interface SubmitInput {
   conversationId: string;
   text: string;
-  mode: "single" | "collaborative";
+  mode: import("../shared/types.ts").TaskMode;
   idempotencyKey: string;
   requested?: IntegrationId;
   forceNewSession?: boolean;
@@ -190,6 +190,7 @@ export class Coordinator {
 
       let draft = "";
       let review = "";
+      const teamNotes: string[] = [];
       for (const step of decision.steps) {
         budget();
         const taskNow = this.must(taskId);
@@ -199,13 +200,19 @@ export class Coordinator {
         calls += 1;
         const view = views.find((item) => item.id === step.adapterId);
         if (!view) throw new RelayError("agent_unavailable", `${step.adapterId} disappeared before the call.`);
+        const teamDraft = step.role === "discuss" || step.role === "final" ? teamNotes.join("\n\n") : draft;
         let result: ExecuteResult;
         try {
-          result = await this.one(taskId, view, input, step.role, draft, review, controller.signal);
+          result = await this.one(taskId, view, input, step.role, teamDraft, review, controller.signal);
         } catch (error) {
+          // In a team discussion one agent failing shouldn't stop the others.
+          if (step.role === "discuss" && !controller.signal.aborted && !(isRelayError(error) && (error.code === "cancelled" || error.code === "limit"))) {
+            await this.progress(taskId, `${view.displayName} couldn't join the discussion (${cleanError(error instanceof Error ? error.message : "failed")}). Continuing with the others.`);
+            continue;
+          }
           // Escalate: if this agent fails (not signed in, usage cap, timeout...), hand the same step
           // to the next ready agent instead of giving up. Cancels and limits still stop the task.
-          const escalatable = step.role === "single" || step.role === "draft";
+          const escalatable = step.role === "single" || step.role === "draft" || step.role === "final";
           if (!escalatable || controller.signal.aborted || (isRelayError(error) && (error.code === "cancelled" || error.code === "limit"))) throw error;
           let lastError = error;
           let done: ExecuteResult | null = null;
@@ -217,7 +224,7 @@ export class Coordinator {
             budget();
             calls += 1;
             try {
-              done = await this.one(taskId, next, input, step.role, draft, review, controller.signal);
+              done = await this.one(taskId, next, input, step.role, teamDraft, review, controller.signal);
               break;
             } catch (nextError) {
               if (controller.signal.aborted) throw nextError;
@@ -227,6 +234,7 @@ export class Coordinator {
           if (!done) throw lastError;
           result = done;
         }
+        if (step.role === "discuss") teamNotes.push(`${view.displayName}:\n${result.text}`);
         if (step.role === "draft" || step.role === "single" || step.role === "revision") draft = result.text;
         if (step.role === "review") review = result.text;
       }
@@ -283,7 +291,7 @@ export class Coordinator {
           siteId: view.id,
           prompt,
           continuedUrl: continued ? session?.providerSessionId : undefined,
-          timeoutMs: this.store.data.settings.limits.maxWallClockMs,
+          timeoutMs: Math.min(this.store.data.settings.limits.maxWallClockMs, 4 * 60 * 1000), // one stuck site must not eat the whole task
           signal,
         });
       } else if (meta.credential === "vm-cli") {
@@ -293,7 +301,7 @@ export class Coordinator {
           prompt,
           resume: continued ? session?.providerSessionId : undefined,
           model: view.model,
-          timeoutMs: this.store.data.settings.limits.maxWallClockMs,
+          timeoutMs: Math.min(this.store.data.settings.limits.maxWallClockMs, 4 * 60 * 1000), // one stuck site must not eat the whole task
           signal,
           fetchImpl: this.runtime.fetchImpl,
         });

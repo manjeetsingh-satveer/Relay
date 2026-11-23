@@ -2,7 +2,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { RelayError } from "../core/errors.ts";
 import type { ExecuteResult } from "../adapters/execute.ts";
 import { driveChat } from "./drive.ts";
-import { siteById, type SiteDefinition } from "./sites.ts";
+import { WEB_SITES, siteById, type SiteDefinition } from "./sites.ts";
 import type { IntegrationId } from "../shared/types.ts";
 
 export async function probeCdp(url: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
@@ -103,6 +103,10 @@ async function openPage(browser: Browser, site: SiteDefinition, continuedUrl?: s
   // Reuse one tab per site instead of opening a new tab for every message.
   const page = pages.find((item) => item.url() === target) ?? pages.find((item) => sameSite(item, site)) ?? await context.newPage();
   await closeDuplicates(pages, site, page);
+  // The VM is small: close other AI sites so only one heavy app is loaded at a time.
+  for (const other of pages) {
+    if (other !== page && WEB_SITES.some((item) => item.id !== site.id && sameSite(other, item))) await other.close().catch(() => undefined);
+  }
   if (page.url() !== target) await page.goto(target, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.bringToFront().catch(() => undefined);
   return page;

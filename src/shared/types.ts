@@ -64,7 +64,8 @@ export interface IntegrationView {
 
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled" | "interrupted";
 export type SessionMode = "continued" | "copied" | "new";
-export type ContributionRole = "single" | "draft" | "review" | "revision";
+export type ContributionRole = "single" | "draft" | "review" | "revision" | "discuss" | "final";
+export type TaskMode = "single" | "collaborative" | "team";
 
 export interface ProgressEvent {
   at: string;
@@ -113,7 +114,7 @@ export interface TaskRecord {
   projectId: string;
   idempotencyKey: string;
   status: TaskStatus;
-  mode: "single" | "collaborative";
+  mode: TaskMode;
   userText: string;
   createdAt: string;
   updatedAt: string;

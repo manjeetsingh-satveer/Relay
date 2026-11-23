@@ -3,7 +3,7 @@ import { RelayError } from "./errors.ts";
 
 export interface RouteChoice {
   adapterId: IntegrationId;
-  role: "single" | "draft" | "review" | "revision";
+  role: import("../shared/types.ts").ContributionRole;
 }
 
 export interface RouteDecision {
@@ -23,7 +23,7 @@ const RESEARCH_ORDER: IntegrationId[] = ["perplexity-web", "claude-web", "chatgp
 
 export function routeLocal(input: {
   prompt: string;
-  mode: "single" | "collaborative";
+  mode: import("../shared/types.ts").TaskMode;
   requested?: IntegrationId;
   repoUrl?: string;
   available: IntegrationView[];
@@ -62,10 +62,24 @@ export function routeLocal(input: {
   return finish(input, ranked, `${why} Local rules are deterministic checks in Relay. They are not a model.`);
 }
 
-function finish(input: { mode: "single" | "collaborative"; allowSameAgentReview: boolean }, ranked: IntegrationView[], explanation: string): RouteDecision {
+function finish(input: { mode: import("../shared/types.ts").TaskMode; allowSameAgentReview: boolean }, ranked: IntegrationView[], explanation: string): RouteDecision {
   const primary = ranked[0];
   if (!primary) {
     throw new RelayError("no_agent", "No web app is reachable. Start the Linux VM from the Computer tab and sign in there. Nothing was sent.");
+  }
+  if (input.mode === "team") {
+    // Up to four ready agents take turns on the task, each seeing what the others said, then the lead answers.
+    const team = ranked.filter((item) => item.capabilities.chat).slice(0, 4);
+    if (team.length < 2) {
+      throw new RelayError("team_too_small", "Team mode needs at least two ready agents. Sign in to another AI app in the Computer tab. Nothing was sent.");
+    }
+    const lead = team[0]!;
+    return {
+      source: "local-rules",
+      explanation: `${explanation} Team: ${team.map((item) => item.displayName).join(", ")}. ${lead.displayName} leads and writes the final answer.`,
+      steps: [...team.map((item) => ({ adapterId: item.id, role: "discuss" as const })), { adapterId: lead.id, role: "final" as const }],
+      fallbacks: ranked.slice(1).map((item) => item.id),
+    };
   }
   const fallbacks = ranked.slice(1).map((item) => item.id);
   if (input.mode === "single") {

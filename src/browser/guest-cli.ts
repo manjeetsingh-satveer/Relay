@@ -44,7 +44,20 @@ export async function runGuestCli(input: {
   const body = await response.json() as { code?: number; stdout?: string; stderr?: string; error?: string };
   if (!response.ok) throw new RelayError("vm-cli", body.error || `Guest helper returned ${response.status}`);
   if (body.code === 127) throw new RelayError("not_installed", body.stderr || `${input.bin} is not installed in the VM.`);
-  if (body.code !== 0) throw new RelayError("provider", `${input.bin} exited ${body.code}: ${(body.stderr || body.stdout || "").slice(0, 400)}`);
+  if (body.code !== 0) {
+    // Claude Code prints a JSON result even on failure; show its message instead of the raw JSON.
+    let detail = (body.stderr || body.stdout || "").trim();
+    try {
+      const parsedError = JSON.parse(body.stdout || "{}") as { result?: string };
+      if (parsedError.result) detail = parsedError.result;
+    } catch {
+      // not JSON
+    }
+    if (/login|authenticat|api key|not logged in|run \/login/i.test(detail)) {
+      throw new RelayError("login", `${input.bin === "claude" ? "Claude Code" : "Cursor CLI"} isn't signed in inside the VM. Open the Computer tab, open a terminal and run \`${input.bin === "claude" ? "claude" : "cursor-agent login"}\` once.`);
+    }
+    throw new RelayError("provider", `${input.bin} exited ${body.code}: ${detail.slice(0, 300)}`);
+  }
   if (input.bin === "cursor-agent") {
     const text = (body.stdout || "").trim();
     if (!text) throw new RelayError("empty", "Cursor CLI returned no text. Nothing was invented.");

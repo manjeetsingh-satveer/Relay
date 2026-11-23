@@ -194,7 +194,7 @@ function Chat(props: {
   onError: (message: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<"single" | "collaborative">("single");
+  const [mode, setMode] = useState<"single" | "collaborative" | "team">("team");
   const [agentId, setAgentId] = useState("auto");
   const [busy, setBusy] = useState(false);
   const pendingKey = useRef<string | null>(null);
@@ -221,10 +221,16 @@ function Chat(props: {
               <span className={`badge ${task.status === "completed" ? "good" : task.status === "running" ? "info" : "bad"}`}>{task.status}</span>
               <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{formatWhen(task.updatedAt)}</span>
             </div>
-            {task.routeExplanation ? <p>{task.routeExplanation}</p> : null}
-            {task.progress.map((event, index) => (
-              <p key={index} style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{formatWhen(event.at)} — {event.message}</p>
-            ))}
+            {task.progress.length > 0 ? (
+              <p style={{ margin: "6px 0", fontSize: 13 }}>{task.progress[task.progress.length - 1]!.message}</p>
+            ) : null}
+            <details>
+              <summary style={{ cursor: "pointer", color: "var(--muted-foreground)", fontSize: 13 }}>Details ({task.progress.length} steps)</summary>
+              {task.routeExplanation ? <p style={{ fontSize: 13 }}>{task.routeExplanation}</p> : null}
+              {task.progress.map((event, index) => (
+                <p key={index} style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{formatWhen(event.at)} — {event.message}</p>
+              ))}
+            </details>
             {task.contributions.map((contribution) => (
               <div key={contribution.id}>
                 <strong>{contribution.adapterId}</strong> · {contribution.role} · {contribution.sessionMode}
@@ -282,8 +288,9 @@ function Chat(props: {
       >
         <div className="row">
           <Label>Mode</Label>
-          <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "collaborative")}>
+          <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "collaborative" | "team")}>
             <option value="single">Single agent</option>
+            <option value="team">Team: agents discuss, lead answers</option>
             <option value="collaborative">Draft, review, revise</option>
           </select>
           <Label>Agent</Label>

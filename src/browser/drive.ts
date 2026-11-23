@@ -15,16 +15,28 @@ export interface DriveOutput {
   pageUrl: string;
 }
 
+const notLoggedIn = (site: SiteDefinition) =>
+  new RelayError(
+    "login",
+    `${site.label}: not signed in. Sign in yourself in the Computer tab, including any MFA or human check. Relay does not type passwords.`,
+  );
+
+/** Any visible "stop generating" button, for sites whose own selector is out of date. */
+const GENERIC_STOP = "button[aria-label*='Stop' i], button[data-testid*='stop' i]";
+
 export async function driveChat(page: Page, site: SiteDefinition, input: DriveInput): Promise<DriveOutput> {
-  await blockIfNeeded(page, site);
-  const composer = await firstVisible(page, site.selectors.composer);
+  // Pages are heavy single-page apps: give them time to render the composer or a sign-in screen.
+  let composer: Locator | null = null;
+  const loadDeadline = Date.now() + 30_000;
+  while (Date.now() < loadDeadline && !input.signal.aborted) {
+    if (site.loginUrl?.test(page.url())) throw notLoggedIn(site);
+    await blockIfNeeded(page, site);
+    if (await anyVisible(page, site.selectors.login)) throw notLoggedIn(site);
+    composer = await firstVisible(page, site.selectors.composer);
+    if (composer) break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   if (!composer) {
-    if (await anyVisible(page, site.selectors.login)) {
-      throw new RelayError(
-        "login",
-        `${site.label}: not logged in. Sign in yourself in the Computer tab, including any MFA or human check. Relay does not type passwords.`,
-      );
-    }
     throw new RelayError(
       "selector",
       `${site.label}: the composer was not found. Tried ${site.selectors.composer.join(", ")}. Edit src/browser/sites.ts. Nothing was copied.`,
@@ -34,18 +46,45 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
   if (type === "password") {
     throw new RelayError("refused", "Refusing to type into a password field. Nothing was sent.");
   }
-  const before = await page.locator(site.selectors.assistant.join(", ")).count();
-  await composer.fill(input.prompt);
+  const assistantSelector = site.selectors.assistant.join(", ");
+  const before = await page.locator(assistantSelector).count();
+  const bodyBefore = await pageText(page);
+  const tag = await composer.evaluate((el) => el.tagName.toLowerCase());
+  if (tag === "textarea" || tag === "input") {
+    await composer.fill(input.prompt);
+  } else {
+    // Rich editors (ProseMirror, Quill, Tiptap) ignore fill(); type like a person instead.
+    await composer.click();
+    await page.keyboard.insertText(input.prompt);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 300));
   const send = await firstVisible(page, site.selectors.send);
-  if (send) await send.click();
+  if (send && (await send.isEnabled().catch(() => false))) await send.click();
   else await composer.press("Enter");
 
+  // Finished = a new reply whose text has stopped changing and no stop button is showing.
+  // If the site's reply selector no longer matches, fall back to the text that appeared on the page.
+  const sentAt = Date.now();
+  let lastText = "";
+  let stable = 0;
+  let fallbackText = "";
   const ready = await waitUntil(async () => {
     await blockIfNeeded(page, site);
-    const streaming = await anyVisible(page, site.selectors.streaming);
-    const count = await page.locator(site.selectors.assistant.join(", ")).count();
-    return count > before && !streaming;
-  }, input.timeoutMs, input.signal);
+    const streaming = (await anyVisible(page, site.selectors.streaming)) || (await anyVisible(page, [GENERIC_STOP]));
+    const count = await page.locator(assistantSelector).count();
+    let current = "";
+    if (count > before) {
+      current = (await page.locator(assistantSelector).last().innerText().catch(() => "")).trim();
+      fallbackText = "";
+    } else if (Date.now() - sentAt > 15_000) {
+      current = newLines(bodyBefore, await pageText(page), input.prompt);
+      fallbackText = current;
+    }
+    if (current && !streaming && current === lastText) stable += 1;
+    else stable = 0;
+    lastText = current;
+    return stable >= 2;
+  }, input.timeoutMs, input.signal, 1000);
 
   if (input.signal.aborted) {
     const stop = await firstVisible(page, site.selectors.stop);
@@ -57,10 +96,10 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
     if (stop) await stop.click().catch(() => undefined);
     throw new RelayError("timeout", `${site.label}: timed out waiting for the page to finish. No reply was copied.`);
   }
-  const last = page.locator(site.selectors.assistant.join(", ")).last();
-  const text = (await last.innerText()).trim();
+  const last = page.locator(assistantSelector).last();
+  const text = fallbackText || (await last.innerText()).trim();
   if (!text) throw new RelayError("empty", `${site.label}: the new message was empty. Nothing was invented.`);
-  const files = await filesFrom(last, site, text);
+  const files = fallbackText ? extractFencedFiles(text).map((file) => ({ name: file.name, bytes: Buffer.from(file.text, "utf8"), mediaType: mediaTypeFor(file.name), source: `Copied from the page (${site.label}). Page content is untrusted.` })) : await filesFrom(last, site, text);
   return { text, files, pageUrl: page.url() };
 }
 
@@ -106,12 +145,28 @@ async function anyVisible(page: Page, selectors: string[]): Promise<boolean> {
   return (await firstVisible(page, selectors)) !== null;
 }
 
-async function waitUntil(check: () => Promise<boolean>, timeoutMs: number, signal: AbortSignal): Promise<boolean> {
+async function waitUntil(check: () => Promise<boolean>, timeoutMs: number, signal: AbortSignal, intervalMs = 100): Promise<boolean> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (signal.aborted) return false;
     if (await check()) return !signal.aborted;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   return false;
+}
+
+async function pageText(page: Page): Promise<string> {
+  return page.evaluate(() => (document.querySelector("main") ?? document.body).innerText).catch(() => "");
+}
+
+/** Lines that appeared after sending, minus the prompt itself. Used only when the reply selector is stale. */
+function newLines(before: string, after: string, prompt: string): string {
+  const seen = new Set(before.split("\n").map((line) => line.trim()));
+  const promptLines = new Set(prompt.split("\n").map((line) => line.trim()));
+  return after
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !seen.has(line) && !promptLines.has(line))
+    .join("\n")
+    .trim();
 }

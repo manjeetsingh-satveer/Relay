@@ -37,6 +37,22 @@ describe("local router", () => {
     expect(decision.fallbacks).toEqual(["chatgpt-web", "grok-web"]);
   });
 
+  it("team mode: up to four agents discuss in turn, then the lead writes the final answer", () => {
+    const decision = routeLocal({
+      prompt: "Hello",
+      mode: "team",
+      available: ["grok-web", "claude-web", "chatgpt-web", "gemini-web", "perplexity-web"].map((id) => view({ id: id as never, credential: "browser" })),
+      allowSameAgentReview: false,
+    });
+    expect(decision.steps.map((step) => step.role)).toEqual(["discuss", "discuss", "discuss", "discuss", "final"]);
+    expect(decision.steps[0]?.adapterId).toBe("claude-web");
+    expect(decision.steps[4]?.adapterId).toBe("claude-web");
+  });
+
+  it("team mode refuses with only one ready agent", () => {
+    expect(() => routeLocal({ prompt: "Hello", mode: "team", available: [view({ id: "claude-web", credential: "browser" })], allowSameAgentReview: false })).toThrow(/at least two/);
+  });
+
   it("prefers a signed-in website over an API adapter", () => {
     const decision = routeLocal({
       prompt: "Hello",

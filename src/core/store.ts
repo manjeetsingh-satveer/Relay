@@ -46,9 +46,9 @@ export const DEFAULT_SETTINGS: Settings = {
   router: "local",
   drexMinConfidence: 0.6,
   limits: {
-    maxProviderCalls: 6,
-    maxWallClockMs: 10 * 60 * 1000,
-    maxTurns: 3,
+    maxProviderCalls: 12,
+    maxWallClockMs: 20 * 60 * 1000,
+    maxTurns: 8,
     maxUsd: null,
   },
   models: {

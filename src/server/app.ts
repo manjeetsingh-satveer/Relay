@@ -52,6 +52,15 @@ export async function startServer(options: {
   const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
   const store = await Store.open(options.dataDir);
+  // Older installs saved the original small limits; raise them so team mode (up to 5 steps) fits.
+  {
+    const limits = store.data.settings.limits;
+    if (limits.maxTurns === 3 && limits.maxProviderCalls === 6 && limits.maxWallClockMs === 600000) {
+      await store.update((data) => {
+        data.settings.limits = { ...data.settings.limits, maxTurns: 8, maxProviderCalls: 12, maxWallClockMs: 20 * 60 * 1000 };
+      });
+    }
+  }
   const auth = await Auth.open(options.dataDir, options.requireLogin ?? Boolean(options.cloudDesktop));
   // Give every install a ready-to-use "General" chat so people can type without creating a project.
   if (store.data.projects.length === 0) {
@@ -229,7 +238,7 @@ export async function startServer(options: {
       const body = await json(request);
       const text = stringField(body, "text");
       const idempotencyKey = stringField(body, "idempotencyKey");
-      const mode = body.mode === "collaborative" ? "collaborative" : "single";
+      const mode = body.mode === "collaborative" || body.mode === "team" ? body.mode : "single";
       if (!text || !idempotencyKey) throw new RelayError("invalid", "text and idempotencyKey are required.");
       const requested = optionalIntegration(body, "agentId");
       const resolution = resolveCall(store.data.contacts, text);

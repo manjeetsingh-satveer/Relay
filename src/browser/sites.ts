@@ -19,6 +19,8 @@ export interface SiteDefinition {
   homeUrl: string;
   termsUrl: string;
   termsNote: string;
+  /** A URL that means "you are signed out" (checked before looking for the composer). */
+  loginUrl?: RegExp;
   selectors: SiteSelectors;
 }
 
@@ -34,6 +36,7 @@ export const WEB_SITES: SiteDefinition[] = [
     id: "claude-web",
     label: "via Claude web app",
     homeUrl: "https://claude.ai/new",
+    loginUrl: /claude\.ai\/login/,
     termsUrl: "https://www.anthropic.com/legal/consumer-terms",
     termsNote: "Anthropic's consumer terms restrict how claude.ai may be accessed. Driving the website can violate those terms. Relay types only into the composer you already opened.",
     selectors: {
@@ -55,7 +58,7 @@ export const WEB_SITES: SiteDefinition[] = [
     termsUrl: "https://openai.com/policies/terms-of-use",
     termsNote: "OpenAI's terms cover chatgpt.com separately from the API. Automating the website can violate those terms.",
     selectors: {
-      composer: [fixture, "#prompt-textarea", "textarea[data-id='root']"],
+      composer: [fixture, "#prompt-textarea", "textarea[aria-label='Chat with ChatGPT']", "textarea[placeholder='Ask ChatGPT']", "textarea[data-id='root']"],
       send: ["[data-relay='send']", "button[data-testid='send-button']"],
       assistant: ["[data-relay='assistant']", "[data-message-author-role='assistant']"],
       code: ["[data-filename]", "pre code"],
@@ -80,7 +83,7 @@ export const WEB_SITES: SiteDefinition[] = [
       login: ["[data-relay='login']", "a[href*='ServiceLogin']", "a[aria-label='Sign in']"],
       captcha: ["[data-relay='captcha']", "iframe[src*='recaptcha']"],
       rateLimit: ["[data-relay='limit']", "text=/quota|rate limit|try again later/i"],
-      streaming: ["[data-relay='streaming']"],
+      streaming: ["[data-relay='streaming']", "button[aria-label='Stop response']"],
       stop: ["[data-relay='stop']", "button[aria-label='Stop response']"],
     },
   },
@@ -91,9 +94,9 @@ export const WEB_SITES: SiteDefinition[] = [
     termsUrl: "https://www.perplexity.ai/hub/legal/terms-of-service",
     termsNote: "Perplexity's terms cover perplexity.ai. Automating the site can violate those terms. Comet, the Perplexity browser, is a different product and is not driven here.",
     selectors: {
-      composer: [fixture, "textarea[placeholder*='Ask']", "div[contenteditable='true']"],
+      composer: [fixture, "[aria-label='Ask anything…']", "textarea[placeholder*='Ask']", "div[contenteditable='true']"],
       send: ["[data-relay='send']", "button[aria-label='Submit']"],
-      assistant: ["[data-relay='assistant']", "[data-testid='answer']"],
+      assistant: ["[data-relay='assistant']", "[data-testid='answer']", "div.prose"],
       code: ["[data-filename]", "pre code"],
       login: ["[data-relay='login']", "button:text-is('Sign in')"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
@@ -109,9 +112,9 @@ export const WEB_SITES: SiteDefinition[] = [
     termsUrl: "https://x.ai/legal/terms-of-service",
     termsNote: "grok.com is the Grok website. It is not Grok Bot. Grok Bot's phone calls are still unavailable. xAI's terms cover use of the website.",
     selectors: {
-      composer: [fixture, "textarea", "div[contenteditable='true']"],
-      send: ["[data-relay='send']", "button[aria-label='Send']"],
-      assistant: ["[data-relay='assistant']", "[data-testid='assistant-message']"],
+      composer: [fixture, "div.tiptap.ProseMirror", "[aria-label='Message Grok']", "textarea", "div[contenteditable='true']"],
+      send: ["[data-relay='send']", "button[aria-label='Submit']", "button[aria-label='Send']"],
+      assistant: ["[data-relay='assistant']", "[data-testid='assistant-message']", "div.message-bubble div.response-content-markdown"],
       code: ["[data-filename]", "pre code"],
       login: ["[data-relay='login']", "a[href*='login']"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
