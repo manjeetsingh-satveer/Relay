@@ -467,6 +467,12 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
+      {!cloud ? (
+        <div className="card row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+          <span>Short on RAM, or want it on your phone too? Run this desktop free in your own GitHub Codespace.</span>
+          <Button size="sm" onClick={() => { location.hash = "cloud"; location.reload(); }}>Continue with GitHub</Button>
+        </div>
+      ) : null}
       <p style={{ maxWidth: 760 }}>{cloud ? "Your cloud desktop. It keeps running when your laptop is off." : "Your private Linux desktop."} Sign in to each AI app here; Relay never sees or types your passwords.</p>
       <div className="row">
         {!record && !cloud ? <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button> : null}

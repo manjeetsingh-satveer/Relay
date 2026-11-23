@@ -92,7 +92,12 @@ function SignIn(props: { onDone: () => void }) {
 
 function Setup(props: { onDone: () => void }) {
   const [step, setStep] = useState<"password" | "scan" | "codes">("password");
-  const [setupToken, setSetupToken] = useState("");
+  // The Relay app opens a new Codespace with #setup=<code>, so the code is filled in for the user.
+  const [setupToken, setSetupToken] = useState(() => {
+    const match = /(?:^#|&)setup=([A-Za-z0-9_-]+)/.exec(location.hash);
+    if (match) history.replaceState(null, "", location.pathname + location.search);
+    return match?.[1] ?? "";
+  });
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [qr, setQr] = useState<{ secret: string; qrSvg: string; uri: string } | null>(null);

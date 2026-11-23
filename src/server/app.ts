@@ -17,6 +17,7 @@ import { preflight } from "../vm/qemu.ts";
 import { isInside } from "../vm/checksum.ts";
 import { attachVncProxy } from "./vnc.ts";
 import { Auth, clientIp, deviceLabel, sameOrigin } from "./auth.ts";
+import { githubCloudRoutes } from "./github-cloud.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
 import { openLoginPage } from "../browser/cdp.ts";
 import { siteById } from "../browser/sites.ts";
@@ -48,6 +49,8 @@ export async function startServer(options: {
   cloudDesktop?: { vncPort: number };
   /** Require the owner's password + authenticator code. On by default in cloud mode. */
   requireLogin?: boolean;
+  /** GitHub OAuth app client ID for "Continue with GitHub" (desktop app only). */
+  githubClientId?: string;
 }): Promise<ServerHandle> {
   const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
@@ -61,6 +64,10 @@ export async function startServer(options: {
       });
     }
   }
+  // "Continue with GitHub" runs Relay in the user's own Codespace. Offered by the local app only, never in cloud mode.
+  const githubCloud = options.cloudDesktop
+    ? null
+    : githubCloudRoutes({ clientId: options.githubClientId ?? process.env.RELAY_GITHUB_CLIENT_ID, secrets: options.secretStore, fetchImpl: options.runtime?.fetchImpl });
   const auth = await Auth.open(options.dataDir, options.requireLogin ?? Boolean(options.cloudDesktop));
   // Give every install a ready-to-use "General" chat so people can type without creating a project.
   if (store.data.projects.length === 0) {
@@ -143,6 +150,11 @@ export async function startServer(options: {
         return send(response, 200, { sessions: auth.sessions(), recoveryCodesLeft: auth.recoveryCodesLeft() });
       }
       throw new RelayError("not_found", "Not found.", 404);
+    }
+    if (githubCloud && url.pathname.startsWith("/api/cloud/")) {
+      if (method !== "GET" && !sameOrigin(request)) throw new RelayError("bad_origin", "Blocked a request from another site.", 403);
+      const result = await githubCloud(method, url.pathname, request, () => json(request));
+      if (result !== undefined) return send(response, 200, result);
     }
     if (url.pathname.startsWith("/api/") && url.pathname !== "/api/health" && !auth.check(request)) {
       throw new RelayError("unauthorized", "Sign in first.", 401);

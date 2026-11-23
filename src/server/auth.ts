@@ -131,7 +131,10 @@ export class Auth {
     }
     if (required && !auth.data) {
       // Only someone who can read the server's disk (or its setup output) can create the owner account.
-      auth.setupToken = randomBytes(9).toString("base64url");
+      // In a Codespace created by the Relay app, the app stores the setup code as a Codespaces
+      // secret (RELAY_SETUP_TOKEN) and passes it to the sign-up screen, so the user never types it.
+      const provided = process.env.RELAY_SETUP_TOKEN?.trim();
+      auth.setupToken = provided && provided.length >= 12 ? provided : randomBytes(9).toString("base64url");
       await writeFile(auth.setupTokenFile, auth.setupToken + "\n", { mode: 0o600 });
     }
     return auth;

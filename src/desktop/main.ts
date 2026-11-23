@@ -1,8 +1,10 @@
-import { app, BrowserWindow, safeStorage } from "electron";
+import { app, BrowserWindow, Menu, safeStorage, session, shell } from "electron";
 import path from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { FileEncryptedSecretStore } from "../core/secrets.ts";
 import { startServer } from "../server/app.ts";
+import { GITHUB_TOKEN_KEY } from "../server/github-cloud.ts";
+import { GITHUB_CLIENT_ID } from "../cloud/config.ts";
 import { beginProvision } from "../vm/provision-lock.ts";
 
 const locked = app.requestSingleInstanceLock();
@@ -28,7 +30,27 @@ app.whenReady().then(async () => {
     staticDir,
     version: app.getVersion(),
     beginProvision,
+    githubClientId: GITHUB_CLIENT_ID,
   });
+  const local = `http://127.0.0.1:${server.port}/`;
+
+  // The user's Codespace link is private to their GitHub account. GitHub accepts the user's
+  // token in X-Github-Token for private ports, so send it there, and only there.
+  let githubToken: string | null = await secrets.get(GITHUB_TOKEN_KEY);
+  setInterval(() => {
+    void secrets.get(GITHUB_TOKEN_KEY).then((token) => {
+      githubToken = token;
+    });
+  }, 3000);
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["https://*.app.github.dev/*", "wss://*.app.github.dev/*"] },
+    (details, callback) => {
+      const host = new URL(details.url).hostname;
+      if (githubToken && host.endsWith(".app.github.dev")) details.requestHeaders["X-Github-Token"] = githubToken;
+      callback({ requestHeaders: details.requestHeaders });
+    },
+  );
+
   const window = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -37,10 +59,38 @@ app.whenReady().then(async () => {
     title: "Relay",
     backgroundColor: "#12110e",
   });
-  // Open straight into the Linux desktop: boot the provisioned VM in the background
-  // and land on the Computer tab. If no VM exists yet, or it is already running, this is a no-op.
-  void fetch(`http://127.0.0.1:${server.port}/api/vm/start`, { method: "POST" }).catch(() => undefined);
-  await window.loadURL(`http://127.0.0.1:${server.port}/#computer`);
+  // Links like GitHub's sign-in page open in the user's normal browser.
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  const openCloud = () => window.loadURL(`${local}#cloud`);
+  const openThisPc = () => {
+    // Boot the local VM in the background and land on the Computer tab (no-op if none / running).
+    void fetch(`${local}api/vm/start`, { method: "POST" }).catch(() => undefined);
+    return window.loadURL(`${local}#computer`);
+  };
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Relay",
+        submenu: [
+          { label: "Cloud desktop (GitHub)", click: () => void openCloud() },
+          { label: "This PC (local VM)", click: () => void openThisPc() },
+          { type: "separator" },
+          { role: "quit" },
+        ],
+      },
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+    ]),
+  );
+
+  // Signed in with GitHub before: go straight to the cloud desktop and leave the local VM off (saves RAM).
+  if (githubToken && GITHUB_CLIENT_ID) await openCloud();
+  else await openThisPc();
   window.on("closed", () => undefined);
 });
 
