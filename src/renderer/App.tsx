@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { CallResolution, IntegrationView, Settings, VmView } from "../shared/types.ts";
+import type { CallResolution, IntegrationView, Settings } from "../shared/types.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -388,30 +388,18 @@ function IntegrationCard(props: { item: IntegrationView; refresh: () => Promise<
 }
 
 function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onError: (message: string) => void }) {
-  const [report, setReport] = useState<VmView["preflight"]>();
-  const [share, setShare] = useState("");
-  const [writable, setWritable] = useState(false);
-  const [allowTcg, setAllowTcg] = useState(false);
-  const [lowMemory, setLowMemory] = useState(false);
-  const [provisionLog, setProvisionLog] = useState("");
-  const [provisioning, setProvisioning] = useState(false);
-  const holdingProvision = useRef(false);
-  const [provisionError, setProvisionError] = useState<string | null>(null);
   const screen = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const viewer = useRef<{ focus: () => void } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
-  const record = props.boot.vm.record;
   const running = props.boot.vm.process === "running";
-  const cloud = Boolean(props.boot.vm.cloud);
 
   useEffect(() => {
     if (!running) return;
     let rfb: { disconnect: () => void; scaleViewport: boolean; focusOnClick: boolean; addEventListener: (type: string, fn: () => void) => void } | null = null;
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    // Reconnect whenever the VNC link drops (VM still booting, restart, proxy hiccup),
-    // otherwise the canvas stays black until the app is reopened.
+    // Reconnect whenever the link drops (desktop waking up, proxy hiccup); otherwise the canvas stays black.
     const connect = async () => {
       const mod = await import("@novnc/novnc");
       if (cancelled || !screen.current) return;
@@ -440,88 +428,30 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
   useEffect(() => {
     const onChange = () => {
       setFullscreen(document.fullscreenElement === frame.current);
-      // Give the keyboard to the VM again after entering or leaving full screen.
+      // Give the keyboard back to the desktop after entering or leaving full screen.
       setTimeout(() => viewer.current?.focus(), 50);
     };
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  useEffect(() => {
-    let stop = false;
-    const tick = () => {
-      api.vmLog().then((result) => {
-        if (stop) return;
-        setProvisionLog(result.text);
-        setProvisioning(holdingProvision.current || result.running);
-      }).catch(() => undefined);
-    };
-    tick();
-    const timer = setInterval(tick, provisioning ? 400 : 1500);
-    return () => {
-      stop = true;
-      clearInterval(timer);
-    };
-  }, [provisioning]);
+  if (!props.boot.vm.cloud) {
+    return (
+      <div className="scroll" style={{ padding: 20 }}>
+        <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
+        <p style={{ maxWidth: 640 }}>Relay's desktop runs in your own free GitHub Codespace, so it works on any PC or phone and doesn't use your computer's memory.</p>
+        <Button onClick={() => { location.hash = "cloud"; location.reload(); }}>Open my cloud desktop</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="scroll" style={{ padding: 20 }}>
       <h1 className="serif" style={{ fontWeight: 500 }}>Computer</h1>
-      {!cloud ? (
-        <div className="card row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-          <span>Short on RAM, or want it on your phone too? Run this desktop free in your own GitHub Codespace.</span>
-          <Button size="sm" onClick={() => { location.hash = "cloud"; location.reload(); }}>Continue with GitHub</Button>
-        </div>
-      ) : null}
-      <p style={{ maxWidth: 760 }}>{cloud ? "Your cloud desktop. It keeps running when your laptop is off." : "Your private Linux desktop."} Sign in to each AI app here; Relay never sees or types your passwords.</p>
+      <p style={{ maxWidth: 760 }}>Your cloud desktop. Sign in to each AI app here; Relay never sees or types your passwords.</p>
       <div className="row">
-        {!record && !cloud ? <Button variant="outline" onClick={() => api.preflight().then(setReport).catch((reason) => props.onError(reason.message))}>Check this machine</Button> : null}
-        {!record && !cloud ? <Button disabled={provisioning} onClick={() => {
-          if (holdingProvision.current) return;
-          holdingProvision.current = true;
-          setProvisioning(true);
-          setProvisionError(null);
-          api.provision({ allowSoftwareEmulation: allowTcg, acknowledgeLowMemory: lowMemory })
-            .then(() => props.refresh())
-            .catch((reason) => {
-              const message = reason instanceof Error ? reason.message : "Provision failed.";
-              setProvisionError(message);
-              props.onError(message);
-            })
-            .finally(() => {
-              holdingProvision.current = false;
-              api.vmLog().then((result) => setProvisionLog(result.text)).catch(() => undefined);
-              setProvisioning(false);
-            });
-        }}>{provisioning ? "Provisioning…" : "Download and provision"}</Button> : null}
-        {record && !running ? <Button onClick={() => api.vmAction("start").then(props.refresh).catch((reason) => props.onError(reason.message))}>Start</Button> : null}
-        {running && !cloud ? <Button variant="outline" onClick={() => api.vmAction("shutdown").then(props.refresh).catch((reason) => props.onError(reason.message))}>Shut down</Button> : null}
         {running ? <Button onClick={() => frame.current?.requestFullscreen().catch((reason) => props.onError(reason instanceof Error ? reason.message : "Full screen failed."))}>Full screen</Button> : null}
-        {running && !cloud ? <Button variant="danger" onClick={() => api.vmAction("force-stop").then(props.refresh).catch((reason) => props.onError(reason.message))}>Force stop</Button> : null}
       </div>
-      {!record && !cloud ? (
-        <div className="card" style={{ marginTop: 12 }}>
-          <label className="row"><input type="checkbox" checked={allowTcg} onChange={(event) => setAllowTcg(event.target.checked)} /> Allow software emulation if hardware virtualization is missing</label>
-          <label className="row"><input type="checkbox" checked={lowMemory} onChange={(event) => setLowMemory(event.target.checked)} /> Continue even if the OS reports less than 1.5 GB available</label>
-        </div>
-      ) : null}
-      {provisionError ? <p className="card" style={{ marginTop: 12, color: "var(--destructive)" }}>{provisionError}</p> : null}
-      {provisioning ? <p style={{ marginTop: 12 }}>Setting up the VM. This takes about 10 minutes.</p> : null}
-      {provisionLog && (provisioning || !record) ? (
-        <details className="card" style={{ marginTop: 12 }} open={provisioning}>
-          <summary>Setup log</summary>
-          <pre style={{ whiteSpace: "pre-wrap", maxHeight: 320, overflow: "auto" }}>{provisionLog}</pre>
-        </details>
-      ) : null}
-      {report ? (
-        <div className="card" style={{ marginTop: 12 }}>
-          <p>{report.qemu.detail}</p>
-          <p>{report.virtualization.detail}</p>
-          <p>Memory available {formatBytes(report.memory.availableBytes)} of {formatBytes(report.memory.totalBytes)}. Required {formatBytes(report.memory.requiredBytes)}. {report.memory.ok ? "Meets the check." : "Below the check."}</p>
-          <p>Disk free {formatBytes(report.disk.availableBytes)} on {report.disk.path}. Required {formatBytes(report.disk.requiredBytes)}.</p>
-          {report.notes.map((note) => <p key={note}>{note}</p>)}
-        </div>
-      ) : null}
       <div
         ref={frame}
         style={fullscreen ? { background: "#000", width: "100vw", height: "100vh" } : { marginTop: 12 }}
@@ -529,19 +459,11 @@ function Computer(props: { boot: Bootstrap; refresh: () => Promise<unknown>; onE
       >
         <div id="screen" ref={screen} style={fullscreen ? { width: "100%", height: "100%", maxWidth: "none", aspectRatio: "auto" } : undefined} />
       </div>
-      {running ? <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginTop: 6 }}>Click the screen to use your mouse and keyboard. Esc leaves full screen.</p> : <p>The display stays blank until the VM is running.</p>}
-      {record ? (
-        <details className="card" style={{ marginTop: 12 }}>
-        <summary>Share a folder from this PC</summary>
-        <form style={{ display: "grid", gap: 8, marginTop: 8 }} onSubmit={(event) => { event.preventDefault(); api.share(share, writable).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>
-          <Input value={share} onChange={(event) => setShare(event.target.value)} placeholder="Absolute path" />
-          <label className="row"><input type="checkbox" checked={writable} onChange={(event) => setWritable(event.target.checked)} /> Allow the guest to write</label>
-          <Button type="submit" size="sm">Attach on next start</Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => api.unshare().then(props.refresh)}>Stop sharing</Button>
-          <p style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Only this folder is shared. Inside the VM, after the next start: <code>sudo mkdir -p /mnt/host && sudo mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host</code></p>
-        </form>
-        </details>
-      ) : null}
+      {running ? (
+        <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginTop: 6 }}>Click the screen to use your mouse and keyboard. Esc leaves full screen.</p>
+      ) : (
+        <p>Starting your desktop…</p>
+      )}
     </div>
   );
 }

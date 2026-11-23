@@ -37,7 +37,7 @@ Open http://127.0.0.1:43123 for the UI. The API runs on 127.0.0.1:43124.
 | Web app driving (selectors, typing, reading replies) | `src/browser/sites.ts`, `src/browser/drive.ts`, `src/browser/cdp.ts` |
 | Routing, team mode, hand-offs | `src/core/router.ts`, `src/core/coordinator.ts`, `src/core/prompt.ts` |
 | CLIs inside the desktop (Claude Code, Cursor) | `src/browser/guest-cli.ts`, `guest/relay-helper.py` |
-| Local VM (QEMU, cloud-init) | `src/vm/` |
+| Cloud desktop (Codespaces, GitHub sign-in) | `src/cloud/`, `src/server/github-cloud.ts`, `.devcontainer/`, `scripts/codespace/` |
 | Cloud mode and login (password + TOTP) | `src/server/auth.ts`, `scripts/cloud/setup.sh` |
 | UI | `src/renderer/` |
 

@@ -28,14 +28,14 @@ Relay runs the real AI apps you already pay for inside a private Linux desktop, 
 - **A team, not a tab.** In **Team mode** up to four AI apps take turns on your task, each seeing what the others said, then the lead writes one answer. You watch them talk in the chat.
 - **Automatic hand-off.** If one app hits a usage cap, isn't signed in or stalls, Relay passes the work to the next one.
 - **Coding agents built in.** Claude Code and the Cursor CLI run inside the same desktop; Codex, Gemini CLI and Copilot CLI are preinstalled.
-- **On your PC or in the cloud.** Run it locally, or on a free Oracle Cloud server and use it from your phone with password + two-factor sign-in.
+- **All in the cloud, free.** Your desktop runs in your own GitHub Codespace (or a free Oracle server), not on your computer, so it works on any PC or phone and doesn't use your RAM.
 - **Private by design.** You sign in yourself. Relay never types or stores your AI passwords, and it never invents a reply when a tool fails.
 
 ## How it works
 
 ![The Relay desktop with the AI app icons](docs/images/desktop.png)
 
-1. Relay starts a small **Ubuntu desktop**: a QEMU VM on Windows, or the server's own desktop in cloud mode.
+1. Relay runs a small **Linux desktop in the cloud**: your own GitHub Codespace (or your own server).
 2. The desktop has **Chromium**, an icon for each AI app, and the CLIs. You sign in to each once in the **Computer** tab.
 3. You type in **chat**. Relay picks the agents (keyword rules today), uses **Playwright** to type into each real web app, waits for the answer and copies it back.
 4. In Team mode each agent's reply is passed to the next as notes, then the lead writes the final answer.
@@ -48,14 +48,15 @@ Relay runs the real AI apps you already pay for inside a private Linux desktop, 
 
 ## Get started
 
-### On Windows
-
-**Requirements:** Windows 10/11 64-bit, [QEMU for Windows](https://qemu.weilnetz.de/w64/), **Windows Hypervisor Platform** turned on, 8 GB RAM or more (the VM needs about 1.6 GB free), and about 15 GB of disk.
+### On Windows (recommended)
 
 1. Download the installer or the portable `.exe` from [Releases](https://github.com/manjeetsingh-satveer/Relay/releases/latest). SmartScreen may warn because the app isn't code-signed yet: **More info → Run anyway**.
-2. Open Relay. The first run downloads Ubuntu (checked against its SHA256 list) and sets up the desktop, which takes about 10 minutes.
-3. In **computer**, double-click each AI app icon and sign in. Use **Full screen** for a bigger view.
-4. Go to **chat** and type into **General**.
+2. Open Relay and click **Continue with GitHub**, then approve the code in your browser.
+3. Relay creates your own private Codespace in your GitHub account (about 10 minutes the first time, then about a minute to wake), using GitHub's free monthly hours. No card.
+4. Choose a password and turn on two-factor sign-in, then in **computer** sign in to each AI app once.
+5. Go to **chat** and type into **General**. Open the same desktop on your phone and carry on where you left off.
+
+Relay checks at each Windows sign-in that GitHub won't delete your unused Codespace, and shows a notification if you need to act.
 
 ### In GitHub Codespaces (free, no card, one click)
 
@@ -85,8 +86,8 @@ Help is welcome on all of these. Each one is a good place to start:
 - [ ] **Run team agents in parallel** on machines with enough memory (the cloud server has room)
 - [ ] **Keep selectors fresh** for every site, with a nightly check that signs in and sends a test prompt
 - [ ] **Native mobile app** (today: install as a web app on your home screen)
-- [ ] **macOS and Linux desktop builds** (QEMU with HVF/KVM)
-- [ ] **Lighter desktop image** for 8 GB laptops
+- [ ] **macOS and Linux app builds** (the app is a thin client, so this is mostly packaging)
+- [ ] **Keep the Codespace awake while a team task runs**
 - [ ] **Code-signed Windows installer**
 - [ ] **More agents**: DeepSeek, Mistral Le Chat, Microsoft Copilot
 
@@ -111,7 +112,7 @@ npm run dev          # web UI at http://127.0.0.1:43123
 npm run dist:win     # Windows installer + portable exe in release/
 ```
 
-More: [architecture](docs/architecture.md) · [VM details](docs/vm.md) · [cloud setup](docs/cloud-oracle.md) · [troubleshooting](docs/troubleshooting.md)
+More: [architecture](docs/architecture.md) · [Codespaces](docs/codespaces.md) · [cloud setup](docs/cloud-oracle.md) · [troubleshooting](docs/troubleshooting.md)
 
 ## Security
 
@@ -119,7 +120,7 @@ The local API listens only on `127.0.0.1`. Cloud mode adds password + TOTP two-f
 
 ## License
 
-MIT © 2026 Manjeet Singh. Third-party programs (QEMU, Ubuntu, Chromium) are not included. See [docs/third-party.md](docs/third-party.md).
+MIT © 2026 Manjeet Singh. Third-party programs (Debian, Chromium) run in your own Codespace and are not included. See [docs/third-party.md](docs/third-party.md).
 
 ---
 

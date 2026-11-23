@@ -28,13 +28,7 @@ Relay sends a client agent id derived from the idempotency key. A 409 means that
 
 ## The Computer tab will not download
 
-The Computer tab shows the provision log while the download runs, and again if it fails. The same text is in `data\vm\provision.log`. A second click does nothing until that run finishes. An image whose SHA256 already matches the Ubuntu checksum file is kept and not downloaded again.
-
-On Windows, Relay uses `qemu-img.exe` from the same folder as `qemu-system-x86_64.exe`. It builds the cloud-init seed itself. It does not need `cloud-localds`. The VM monitor uses a local TCP port because Windows QEMU does not use a Unix socket. Relay still asks QEMU for WHPX and does not enable that Windows feature for you.
-
-## The display stays black
-
-The VM process can be running while cloud-init is still installing XFCE. Read the serial log. That text is the guest console, not a progress percentage.
+If the cloud desktop doesn't open, check the Codespace at github.com/codespaces. Inside it, logs are in `~/relay-data/logs/` and `bash scripts/codespace/start.sh` restarts everything. See [codespaces.md](codespaces.md).
 
 ## I asked Relay to call someone
 

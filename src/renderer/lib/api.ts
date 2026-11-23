@@ -86,15 +86,4 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ contactId, confirm: true }),
     }),
-  preflight: () => request<NonNullable<VmView["preflight"]>>("/api/vm/preflight", { method: "POST", body: "{}" }),
-  provision: (body: { allowSoftwareEmulation?: boolean; acknowledgeLowMemory?: boolean }) =>
-    request<VmView>("/api/vm/provision", { method: "POST", body: JSON.stringify(body) }),
-  vmLog: () => request<{ text: string; running: boolean }>("/api/vm/log"),
-  vmAction: (action: "start" | "shutdown" | "pause" | "resume" | "force-stop") =>
-    request<VmView & { detail?: string }>(`/api/vm/${action}`, { method: "POST", body: "{}" }),
-  share: (sharePath: string, writable: boolean) =>
-    request<{ detail: string }>("/api/vm/share", { method: "POST", body: JSON.stringify({ path: sharePath, confirmShare: true, writable }) }),
-  unshare: () => request("/api/vm/unshare", { method: "POST", body: "{}" }),
-  serial: () => request<{ text: string }>("/api/vm/serial"),
-  deleteVm: (confirmation: string) => request("/api/vm/delete", { method: "POST", body: JSON.stringify({ confirmation }) }),
 };

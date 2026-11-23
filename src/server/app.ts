@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { isRelayError, RelayError } from "../core/errors.ts";
 import { Coordinator } from "../core/coordinator.ts";
@@ -12,16 +12,13 @@ import { probeKey, probeLiveBody } from "../adapters/probe.ts";
 import { readResponsesText } from "../adapters/http.ts";
 import { requestJson } from "../adapters/http.ts";
 import type { AdapterRuntime } from "../adapters/execute.ts";
-import { VmManager } from "../vm/manager.ts";
-import { preflight } from "../vm/qemu.ts";
-import { isInside } from "../vm/checksum.ts";
+import { isInside } from "../core/paths.ts";
 import { attachVncProxy } from "./vnc.ts";
 import { Auth, clientIp, deviceLabel, sameOrigin } from "./auth.ts";
 import { githubCloudRoutes } from "./github-cloud.ts";
 import { INTEGRATION_IDS, type IntegrationId, type Settings } from "../shared/types.ts";
 import { openLoginPage } from "../browser/cdp.ts";
 import { siteById } from "../browser/sites.ts";
-import { beginProvision as defaultBeginProvision } from "../vm/provision-lock.ts";
 
 export interface ServerHandle {
   /** Set only in login mode before the owner account exists. */
@@ -40,7 +37,6 @@ export async function startServer(options: {
   staticDir?: string;
   runtime?: AdapterRuntime;
   version?: string;
-  beginProvision?: () => () => void;
   /**
    * Cloud mode: Relay runs on a Linux server whose own desktop, Chromium (CDP on 127.0.0.1:9222)
    * and CLI helper (127.0.0.1:43125) are local. No QEMU VM is started; the Computer tab shows the
@@ -52,7 +48,6 @@ export async function startServer(options: {
   /** GitHub OAuth app client ID for "Continue with GitHub" (desktop app only). */
   githubClientId?: string;
 }): Promise<ServerHandle> {
-  const acquireProvision = options.beginProvision ?? defaultBeginProvision;
   const host = options.host ?? "127.0.0.1";
   const store = await Store.open(options.dataDir);
   // Older installs saved the original small limits; raise them so team mode (up to 5 steps) fits.
@@ -85,7 +80,6 @@ export async function startServer(options: {
     }
   };
   const coordinator = new Coordinator(store, options.secretStore, options.runtime, notify);
-  const vm = new VmManager(options.dataDir);
   const version = options.version ?? "0.1.0";
 
   const server = createServer(async (request, response) => {
@@ -100,11 +94,7 @@ export async function startServer(options: {
 
   attachVncProxy(
     server,
-    async () => {
-      if (options.cloudDesktop) return options.cloudDesktop.vncPort;
-      const record = store.data.vm;
-      return record?.vncPort && (await vm.isAlive(record)) ? record.vncPort : null;
-    },
+    async () => options.cloudDesktop?.vncPort ?? null,
     (request) => auth.check(request) && sameOrigin(request),
   );
 
@@ -435,110 +425,6 @@ export async function startServer(options: {
       });
     }
     if (method === "GET" && url.pathname === "/api/vm") return send(response, 200, await vmState());
-    if (method === "GET" && url.pathname === "/api/vm/log") {
-      let text = "";
-      try {
-        text = await readFile(path.join(options.dataDir, "vm", "provision.log"), "utf8");
-      } catch {
-        text = "";
-      }
-      return send(response, 200, { text: text.slice(-20000), running: vm.isProvisioning() });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/preflight") return send(response, 200, await preflight(options.dataDir));
-    if (method === "POST" && url.pathname === "/api/vm/provision") {
-      const release = acquireProvision();
-      try {
-      const body = await json(request);
-      const record = await vm.provision({
-        record: store.data.vm,
-        allowSoftwareEmulation: body.allowSoftwareEmulation === true,
-        acknowledgeLowMemory: body.acknowledgeLowMemory === true,
-        holdsLock: true,
-      });
-      await store.update((data) => {
-        data.vm = record;
-      });
-      notify();
-      return send(response, 201, await vmState());
-      } finally {
-        release();
-      }
-    }
-    if (method === "POST" && url.pathname === "/api/vm/start") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "Provision a VM first.");
-      const record = await vm.start(store.data.vm);
-      await store.update((data) => {
-        data.vm = record;
-      });
-      notify();
-      return send(response, 200, await vmState());
-    }
-    if (method === "POST" && url.pathname === "/api/vm/shutdown") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      const detail = await vm.shutdown(store.data.vm);
-      return send(response, 200, { detail, ...(await vmState()) });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/pause") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      const detail = await vm.pause(store.data.vm);
-      return send(response, 200, { detail });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/resume") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      if (!(await vm.isAlive(store.data.vm))) {
-        const record = await vm.start(store.data.vm);
-        await store.update((data) => {
-          data.vm = record;
-        });
-        notify();
-        return send(response, 200, { detail: "The process was not running, so Relay started it again.", ...(await vmState()) });
-      }
-      const detail = await vm.resumeCpu(store.data.vm);
-      return send(response, 200, { detail });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/force-stop") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      const detail = await vm.forceStop(store.data.vm);
-      return send(response, 200, { detail });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/share") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      const body = await json(request);
-      if (body.confirmShare !== true) throw new RelayError("confirm_required", "confirmShare must be true.");
-      const sharePath = stringField(body, "path");
-      if (!sharePath || !path.isAbsolute(sharePath)) throw new RelayError("invalid", "path must be an absolute directory.");
-      const info = await stat(sharePath);
-      if (!info.isDirectory()) throw new RelayError("invalid", "path is not a directory.");
-      await store.update((data) => {
-        if (data.vm) data.vm.share = { path: sharePath, writable: body.writable === true };
-      });
-      notify();
-      return send(response, 200, {
-        detail: "The folder will be attached the next time this VM starts. It is not mounted until then. Other host folders stay private.",
-        ...(await vmState()),
-      });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/unshare") {
-      await store.update((data) => {
-        if (data.vm) delete data.vm.share;
-      });
-      notify();
-      return send(response, 200, await vmState());
-    }
-    if (method === "GET" && url.pathname === "/api/vm/serial") {
-      if (!store.data.vm) return send(response, 200, { text: "" });
-      return send(response, 200, { text: await vm.serialTail(store.data.vm) });
-    }
-    if (method === "POST" && url.pathname === "/api/vm/delete") {
-      if (!store.data.vm) throw new RelayError("vm_missing", "No VM.");
-      const body = await json(request);
-      await vm.remove(store.data.vm, stringField(body, "confirmation") ?? "");
-      await store.update((data) => {
-        data.vm = null;
-      });
-      notify();
-      return send(response, 200, { deleted: true });
-    }
     if (method === "GET" && options.staticDir) return serveStatic(options.staticDir, url.pathname, response);
     throw new RelayError("not_found", "Not found.", 404);
   }
@@ -551,11 +437,8 @@ export async function startServer(options: {
   }
 
   async function vmState() {
-    if (options.cloudDesktop) return { record: null, process: "running" as const, cloud: true };
-    const record = store.data.vm;
-    let processState: "absent" | "running" = "absent";
-    if (record && (await vm.isAlive(record))) processState = "running";
-    return { record, process: processState };
+    // Relay's desktop always runs in the cloud (the user's Codespace or own server); there is no local VM.
+    return options.cloudDesktop ? { record: null, process: "running" as const, cloud: true } : { record: null, process: "absent" as const };
   }
 
   await new Promise<void>((resolve) => server.listen(options.port, host, resolve));

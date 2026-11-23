@@ -6,7 +6,6 @@ import { startServer } from "../server/app.ts";
 import { GITHUB_TOKEN_KEY } from "../server/github-cloud.ts";
 import { GITHUB_CLIENT_ID } from "../cloud/config.ts";
 import { GitHubCodespaces } from "../cloud/github.ts";
-import { beginProvision } from "../vm/provision-lock.ts";
 
 // Quiet run at Windows sign-in: keep the user's Codespace from being deleted, then exit. No window.
 const KEEPALIVE = process.argv.includes("--keepalive");
@@ -94,7 +93,6 @@ if (!KEEPALIVE) app.whenReady().then(async () => {
     secretStore: secrets,
     staticDir,
     version: app.getVersion(),
-    beginProvision,
     githubClientId: GITHUB_CLIENT_ID,
   });
   const local = `http://127.0.0.1:${server.port}/`;
@@ -149,18 +147,12 @@ if (!KEEPALIVE) app.whenReady().then(async () => {
       .catch(() => undefined);
   }
   const openCloud = () => window.loadURL(`${local}#cloud`);
-  const openThisPc = () => {
-    // Boot the local VM in the background and land on the Computer tab (no-op if none / running).
-    void fetch(`${local}api/vm/start`, { method: "POST" }).catch(() => undefined);
-    return window.loadURL(`${local}#computer`);
-  };
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
         label: "Relay",
         submenu: [
-          { label: "Cloud desktop (GitHub)", click: () => void openCloud() },
-          { label: "This PC (local VM)", click: () => void openThisPc() },
+          { label: "Open cloud desktop", click: () => void openCloud() },
           { type: "separator" },
           {
             label: "Keep cloud desktop from expiring",
@@ -182,9 +174,9 @@ if (!KEEPALIVE) app.whenReady().then(async () => {
     ]),
   );
 
-  // Signed in with GitHub before: go straight to the cloud desktop and leave the local VM off (saves RAM).
-  if (githubToken && GITHUB_CLIENT_ID) await openCloud();
-  else await openThisPc();
+  // Relay's desktop runs in the user's own Codespace: always open the cloud launcher
+  // (it signs in with GitHub the first time, then wakes and opens the Codespace).
+  await openCloud();
   window.on("closed", () => undefined);
 });
 

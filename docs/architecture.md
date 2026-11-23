@@ -1,6 +1,6 @@
 # Architecture
 
-Relay is a local desktop app. The browser UI, the Electron shell, the coordinator, the adapters, and the VM worker are separate.
+Relay's desktop and engine run in the cloud: the user's own GitHub Codespace (or their own server). The Windows app is a thin client that signs in with GitHub, wakes the Codespace, and shows it.
 
 ```text
 Electron window  or  Vite dev server
@@ -13,8 +13,6 @@ HTTP + WebSocket on 127.0.0.1
         |     +-- adapters
         |     +-- JSON store and artifact files
         |
-        +-- VM worker
-              +-- QEMU
               +-- noVNC over a localhost WebSocket
 ```
 
@@ -34,15 +32,15 @@ If Relay restarts while a task is `running`, the task becomes `interrupted` and 
 
 ## Adapters
 
-The default adapters drive a browser inside the VM. Playwright on the host attaches to Chromium's debugging port, which QEMU forwards only to 127.0.0.1. The profile stays on the VM disk. Selectors are in `src/browser/sites.ts`. Page text is copied as untrusted data.
+The default adapters drive Chromium on the cloud desktop. Relay's engine attaches to Chromium's debugging port on 127.0.0.1 of the same machine. The browser profile stays on that machine's disk. Selectors are in `src/browser/sites.ts`. Page text is copied as untrusted data.
 
 API adapters run only after Settings turns API keys on. Drex remains an optional router. Grok Bot refuses to run.
 
 Session text is specific. "Continued" means the provider accepted a previous response id or a CLI session id. "Copied" means Relay put earlier turns into a new request because that API has no server-side session.
 
-## VM
+## Cloud desktop
 
-The worker will not download an image until you ask. It checks QEMU, `/dev/kvm` on Linux, reported free memory, and free disk. It verifies the Ubuntu cloud image against `SHA256SUMS` from `cloud-images.ubuntu.com`. It does not check the GPG signature of that file. The qcow2 overlay and seed ISO live in the data directory. Host folders stay unshared until a confirmed path is attached on the next boot.
+The Codespace is built from `.devcontainer/` (Debian, XFCE, TigerVNC on localhost, Chromium, Node 22). `scripts/codespace/start.sh` starts the desktop and Relay in cloud mode on every start. Only Relay's port is forwarded, and it is private to the owner's GitHub account; Relay's own password + TOTP login sits on top. The Windows app finds or creates the Codespace through the GitHub API (`src/cloud/github.ts`) and opens it with the user's token in `X-Github-Token`.
 
 ## Credentials
 

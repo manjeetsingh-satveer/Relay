@@ -10,7 +10,7 @@ Do not open a public issue that includes a key, a session token, a guest passwor
 
 ## What to expect
 
-We will confirm whether the report is about Relay's code. Third-party services (OpenAI, Anthropic, Google, Perplexity, xAI, Cursor, Nace, Ubuntu, QEMU) have their own reporting processes.
+We will confirm whether the report is about Relay's code. Third-party services (OpenAI, Anthropic, Google, Perplexity, xAI, Cursor, Nace, GitHub Codespaces) have their own reporting processes.
 
 ## Built-in limits
 
@@ -18,7 +18,7 @@ We will confirm whether the report is about Relay's code. Third-party services (
 - Dev mode keeps keys in process memory. The Electron build uses OS encryption when the platform provides it, and refuses to write plaintext keys when it does not.
 - Keys are not written to `store.json`.
 - Model and page text is treated as untrusted data when it is handed to another agent.
-- Host folders are not mounted in the VM unless you pass an absolute path and set `confirmShare`.
+- The cloud desktop's link is private to the owner's GitHub account, and Relay adds password + two-factor sign-in.
 - Relay will not delete a directory outside its own data folder.
 - Phone confirmation never places a call. Grok Bot does not expose a calling API that Relay can use.
 

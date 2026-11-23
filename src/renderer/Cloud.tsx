@@ -136,7 +136,7 @@ export function CloudLauncher() {
           </>
         ) : null}
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <a href="#chat" onClick={() => setTimeout(() => location.reload(), 0)} style={{ color: "var(--muted-foreground)", fontSize: 13 }}>Use this PC instead</a>
+          <span />
           {login ? <Button variant="ghost" size="sm" onClick={() => void signOut()}>Sign out of GitHub</Button> : null}
         </div>
       </div>

@@ -18,7 +18,7 @@ Suggested description:
 
 Suggested topics:
 
-`ai` `desktop` `electron` `openai` `anthropic` `gemini` `cursor` `qemu` `linux` `windows` `open-source`
+`ai` `desktop` `electron` `openai` `anthropic` `gemini` `cursor` `codespaces` `linux` `windows` `open-source`
 
 Do not add a star count or a download count. Do not add a CI badge until the Actions workflow on this repository has completed once. A badge for a workflow that has never run is a broken image.
 
@@ -27,7 +27,7 @@ Suggested first release name: `v0.1.0`
 Release notes should say:
 
 - The Windows artifacts are the app (NSIS installer and portable exe).
-- They do not include Ubuntu, QEMU, or any provider.
+- They do not include any provider's software; the desktop is built in the user's own Codespace.
 - The Computer tab downloads the Ubuntu 24.04 cloud image on first provision and checks its SHA256.
 - Grok Bot chat and Grok Bot phone calls are unsupported.
 - Drex is an optional routing model, not the chat model.

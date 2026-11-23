@@ -15,14 +15,13 @@ The owner wants Relay to cost nothing for users or for the owner. A desktop with
         │                                              │ knows which desktop belongs to which user
         └──────── encrypted tunnel (Cloudflare Tunnel / Tailscale, free) ────────┐
                                                                                   ▼
-                       the user's own desktop:  ① their Windows PC (Relay app + VM)
-                                                ② their free Oracle Cloud server
-                                                ③ their GitHub Codespace (free hours)
+                       the user's own cloud desktop:  ① their GitHub Codespace (free hours, default)
+                                                      ② their free Oracle Cloud server (always on)
 ```
 
 - **Sign in once with Google or Apple** on any device. The Relay account remembers the user's desktop, so the phone connects to the same desktop the PC uses and work continues where it left off.
 - **The owner's costs stay at about $0.** Accounts, device pairing and push notifications fit the free tiers of Supabase (auth + Postgres), Cloudflare (Workers + Tunnel) and Firebase Cloud Messaging. Unavoidable store fees: Apple Developer $99/year (for the iOS app) and Google Play $25 once.
-- **The user's costs are $0.** Option ① is their own PC, which must be on to reach the desktop from the phone. ② Oracle Always Free is always on but needs a card check. ③ Codespaces gives free hours with no card.
+- **The user's costs are $0.** ① Codespaces gives free hours with no card (the Relay app creates it for them). ② Oracle Always Free is always on but needs a card check. Relay no longer runs a desktop on the user's own computer.
 - **Security:** each desktop is private to its owner (it's their machine). The tunnel only accepts connections carrying a valid session from Relay accounts. The account service stores no chats and no AI sign-ins. Those never leave the user's desktop.
 - The hosted-desktop design below stays as an optional paid tier for later, for people who want Relay to run while their PC is off without setting up Oracle.
 
