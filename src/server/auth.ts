@@ -134,7 +134,10 @@ export class Auth {
       // In a Codespace created by the Relay app, the app stores the setup code as a Codespaces
       // secret (RELAY_SETUP_TOKEN) and passes it to the sign-up screen, so the user never types it.
       const provided = process.env.RELAY_SETUP_TOKEN?.trim();
-      auth.setupToken = provided && provided.length >= 12 ? provided : randomBytes(9).toString("base64url");
+      // Keep the same code across restarts (a Codespace waking from sleep restarts Relay) until it's used.
+      const previous = (await readFile(auth.setupTokenFile, "utf8").catch(() => "")).trim();
+      auth.setupToken =
+        provided && provided.length >= 12 ? provided : previous.length >= 12 ? previous : randomBytes(9).toString("base64url");
       await writeFile(auth.setupTokenFile, auth.setupToken + "\n", { mode: 0o600 });
     }
     return auth;
