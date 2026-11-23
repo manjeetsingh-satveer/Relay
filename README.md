@@ -10,6 +10,8 @@ Relay runs the real AI apps you already pay for inside a private Linux desktop, 
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows-2ea44f?style=for-the-badge&logo=windows)](https://github.com/manjeetsingh-satveer/Relay/releases/latest)
 &nbsp;
+[![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces_(free)-24292f?style=for-the-badge&logo=github)](https://codespaces.new/manjeetsingh-satveer/Relay?quickstart=1)
+&nbsp;
 [![Run in the cloud](https://img.shields.io/badge/Run_on-Oracle_Cloud_(free)-f80000?style=for-the-badge&logo=oracle)](docs/cloud-oracle.md)
 &nbsp;
 [![MIT License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
@@ -55,7 +57,11 @@ Relay runs the real AI apps you already pay for inside a private Linux desktop, 
 3. In **computer**, double-click each AI app icon and sign in. Use **Full screen** for a bigger view.
 4. Go to **chat** and type into **General**.
 
-### In the cloud (free, works from your phone)
+### In GitHub Codespaces (free, no card, one click)
+
+Click **Open in Codespaces** above. Relay builds itself in your own private Codespace (about 10 minutes the first time), then you open it from your PC or phone with password + two-factor sign-in. See [docs/codespaces.md](docs/codespaces.md).
+
+### On your own always-on server (free, works from your phone)
 
 Follow **[docs/cloud-oracle.md](docs/cloud-oracle.md)**: create a free Oracle Cloud Ampere server, run one setup command, then open Relay over Tailscale on your laptop and phone. Cloud mode needs a password plus an authenticator code, with recovery codes, and nothing is exposed to the public internet.
 

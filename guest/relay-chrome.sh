@@ -13,7 +13,9 @@ mkdir -p "$PROFILE"
 PATH="$PATH:/snap/bin"
 for bin in chromium chromium-browser google-chrome google-chrome-stable; do
   if command -v "$bin" >/dev/null 2>&1; then
-    exec "$bin" \
+    # RELAY_CHROME_FLAGS: extra flags, e.g. "--no-sandbox --disable-dev-shm-usage" inside containers.
+    # shellcheck disable=SC2086
+    exec "$bin" ${RELAY_CHROME_FLAGS:-} \
       --remote-debugging-port=9223 \
       --user-data-dir="$PROFILE" \
       --no-first-run \
