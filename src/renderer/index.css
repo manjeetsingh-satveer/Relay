@@ -62,3 +62,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 #screen canvas { max-width: 100%; }
 
 select option { background: var(--card); color: var(--foreground); }
+
+.rail { min-width: 0; overflow-x: hidden; }
+.rail .scroll { overflow-x: hidden; }
+.rail .grid-cards > * { min-width: 0; }

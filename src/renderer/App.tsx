@@ -172,7 +172,7 @@ function Projects(props: {
       ) : null}
       <div style={{ display: "grid", gap: 2 }}>
         {[...conversations].reverse().filter((conversation) => !props.boot.bots.some((item) => item.conversationId === conversation.id)).map((conversation) => (
-          <div key={conversation.id} className="row chat-item" style={{ gap: 0, background: props.conversationId === conversation.id ? "var(--card)" : "transparent", borderRadius: 8 }}>
+          <div key={conversation.id} className="row chat-item" style={{ gap: 0, minWidth: 0, width: "100%", overflow: "hidden", flexWrap: "nowrap", background: props.conversationId === conversation.id ? "var(--card)" : "transparent", borderRadius: 8 }}>
             <button onClick={() => props.onConversation(conversation.id)} style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, textAlign: "left", color: props.conversationId === conversation.id ? "var(--primary)" : "inherit", padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {conversation.title}
             </button>
