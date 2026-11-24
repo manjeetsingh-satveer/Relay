@@ -104,6 +104,7 @@ async function openPage(browser: Browser, site: SiteDefinition, continuedUrl?: s
     const main = pages.find((item) => !item.url().startsWith("devtools://")) ?? pages[0];
     if (!main) throw new RelayError("not_installed", `${site.label} has no open window. Open it from the desktop icon.`);
     await main.bringToFront().catch(() => undefined);
+    if (site.startClick) await main.locator(site.startClick).first().click({ timeout: 5000 }).catch(() => undefined);
     return main;
   }
   const target = continuedUrl ?? site.homeUrl;

@@ -48,6 +48,8 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
   }
   const assistantSelector = site.selectors.assistant.join(", ");
   const before = await page.locator(assistantSelector).count();
+  const lastKey = async () => (site.rowKeyAttr ? await page.locator(assistantSelector).last().getAttribute(site.rowKeyAttr, { timeout: 1000 }).catch(() => null) : null);
+  const keyBefore = await lastKey();
   const bodyBefore = await pageText(page);
   const tag = await composer.evaluate((el) => el.tagName.toLowerCase());
   if (tag === "textarea" || tag === "input") {
@@ -73,7 +75,8 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
     const streaming = (await anyVisible(page, site.selectors.streaming)) || (await anyVisible(page, [GENERIC_STOP]));
     const count = await page.locator(assistantSelector).count();
     let current = "";
-    if (count > before) {
+    const key = site.rowKeyAttr && count > 0 ? await lastKey() : null;
+    if (count > before || (key !== null && key !== keyBefore)) {
       current = (await page.locator(assistantSelector).last().innerText().catch(() => "")).trim();
       fallbackText = "";
     } else if (Date.now() - sentAt > 15_000) {

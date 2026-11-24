@@ -25,6 +25,10 @@ export interface SiteDefinition {
   cdpUrl?: string;
   /** A desktop (Electron) app: reuse its own window, never navigate or open tabs. */
   desktopApp?: boolean;
+  /** Clicked before typing (e.g. the main chat in a desktop app). */
+  startClick?: string;
+  /** Attribute that identifies a reply row, for apps that only keep visible rows on screen. */
+  rowKeyAttr?: string;
   selectors: SiteSelectors;
 }
 
@@ -45,13 +49,16 @@ export const WEB_SITES: SiteDefinition[] = [
     homeUrl: "file:///opt/Grok%20Bot/resources/app.asar/dist/renderer/index.html",
     cdpUrl: GROK_BOT_CDP,
     desktopApp: true,
+    startClick: "[aria-label='Grok Bot, Main Bot']",
+    rowKeyAttr: "data-row-key",
     termsUrl: "https://x.ai/legal/terms-of-service",
     termsNote: "xAI's terms apply to Grok Bot. Relay types into the Grok Bot window you signed in to, on your own desktop.",
     // Unconfirmed guesses until checked against a signed-in Grok Bot window.
     selectors: {
-      composer: [fixture, "textarea", "[contenteditable='true']"],
-      send: ["[data-relay='send']", "button[aria-label*='Send' i]", "button[type='submit']"],
-      assistant: ["[data-relay='assistant']", "[data-role='assistant']", "[data-message-author='assistant']", "[class*='assistant' i]", "[class*='message' i]"],
+      // Checked against a signed-in Grok Bot 1.2.3 window on 24 Nov 2026. Enter sends.
+      composer: [fixture, "[role='textbox'][aria-label='Prompt']"],
+      send: ["[data-relay='send']"],
+      assistant: ["[data-relay='assistant']", "[data-row-key][data-role='assistant']"],
       code: ["pre code"],
       login: ["[data-relay='login']", "button:text-is('Sign in')"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
