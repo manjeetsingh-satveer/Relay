@@ -53,8 +53,7 @@ export const WEB_SITES: SiteDefinition[] = [
     desktopApp: true,
     startClick: "[aria-label='Grok Bot, Main Bot']",
     rowKeyAttr: "data-row-key",
-    stripPrefix: /^Grok Bots*
-+/,
+    stripPrefix: /^Grok Bot\s*\n+/,
     termsUrl: "https://x.ai/legal/terms-of-service",
     termsNote: "xAI's terms apply to Grok Bot. Relay types into the Grok Bot window you signed in to, on your own desktop.",
     // Unconfirmed guesses until checked against a signed-in Grok Bot window.
