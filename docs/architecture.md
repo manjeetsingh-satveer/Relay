@@ -42,6 +42,10 @@ Session text is specific. "Continued" means the provider accepted a previous res
 
 The Codespace is built from `.devcontainer/` (Debian, XFCE, TigerVNC on localhost, Chromium, Node 22). `scripts/codespace/start.sh` starts the desktop and Relay in cloud mode on every start. Only Relay's port is forwarded, and it is private to the owner's GitHub account; Relay's own password + TOTP login sits on top. The Windows app finds or creates the Codespace through the GitHub API (`src/cloud/github.ts`) and opens it with the user's token in `X-Github-Token`.
 
+## Bots and the wake-up alarm
+
+`src/core/bots.ts` holds bots (agent, job, memory, schedule) and the schedule maths. The server checks every minute for due bots and runs each once per local day, catching up after a late wake-up. @mentions run bots one at a time (the desktop runs one AI app at a time), passing earlier replies as untrusted notes. `src/cloud/alarm.ts` keeps a private `relay-alarm` repository in the user's account with a scheduled workflow that starts the Codespace; the desktop app shares its GitHub token with the Codespace as the `RELAY_GITHUB_TOKEN` Codespaces secret only when the user granted repo + workflow scope.
+
 ## Credentials
 
 Dev mode uses an in-memory secret store. Electron uses `safeStorage` when the OS reports encryption is available, and keeps keys in memory otherwise. Neither path writes the raw key into `store.json`.

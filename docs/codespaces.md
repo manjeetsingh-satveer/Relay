@@ -24,6 +24,13 @@ The link is **private**: only your GitHub account can open it, and Relay's own p
 - A Codespace **stops after a period of inactivity**. Set it to up to 4 hours in *GitHub → Settings → Codespaces → Default idle timeout*. Opening it again wakes it in about a minute; your chats and sign-ins are kept.
 - Stop it yourself from github.com/codespaces when you're done to save hours.
 - A Codespace you don't use for a long time is deleted by GitHub (30 days by default), and your sign-ins are lost with it.
+- Relay prevents that: if you allow it, it creates a private **relay-alarm** repository in your account whose scheduled GitHub Action wakes the Codespace once a week, and at each scheduled bot's time. Each wake-up uses a few minutes of your free hours. Delete that repository to turn it off.
+
+## Bots, @mentions and Grok Bot
+
+- **Bots** are AI agents with their own chat, job, memory and optional daily schedule. Pick them on first run or create your own on the **bots** tab.
+- Type **@BotName** (or **@all**) in any chat: each named bot works in turn in its own chat and its reply is copied back.
+- **Grok Bot** is installed in the desktop and opens with a local-only DevTools port (127.0.0.1:9224) so Relay can type into it. Sign in in its window; sign-in links open in Relay's Chromium. Finish signing in before the Codespace sleeps, or start again.
 
 ## Troubleshooting
 
