@@ -271,7 +271,7 @@ function Chat(props: {
     const lastUser = messages.map((item) => item.role).lastIndexOf("user");
     const sent = messages.slice(lastUser + 1).find((item) => item.role === "notice" && item.text.startsWith("Sent to @"));
     if (sent) {
-      const names = [...sent.text.matchAll(/@([\w.-]+)/g)].map((match) => match[1]!);
+      const names = [...sent.text.matchAll(/@([\w-]+(?:\.[\w-]+)*)/g)].map((match) => match[1]!);
       const after = messages.slice(lastUser + 1);
       for (const name of names) {
         const done = after.some((item) => item.text.startsWith(`**@${name}**`) || item.text.startsWith(`@${name} couldn't`));

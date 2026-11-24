@@ -677,7 +677,7 @@ export async function startServer(options: {
           replies.push(`${bot.name}: ${reply.text}`);
           await postToOrigin(originId, { role: "assistant", text: `**@${bot.name}**\n\n${reply.text}`, adapterId: reply.adapterId ?? bot.agentId });
         } else {
-          await postToOrigin(originId, { role: "notice", text: `@${bot.name} couldn't finish: ${finished?.error ?? finished?.status ?? "no reply"}. Open its chat for details.` });
+          await postToOrigin(originId, { role: "notice", text: `@${bot.name} couldn't finish: ${(finished?.error ?? finished?.status ?? "no reply").replace(/\.+$/, "")}. Open its chat for details.` });
         }
       } catch (error) {
         await postToOrigin(originId, { role: "notice", text: `@${bot.name} couldn't start: ${error instanceof Error ? error.message : "unknown error"}` });

@@ -78,15 +78,19 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
   let lastText = "";
   let stable = 0;
   let unchangedFor = 0;
+  // The site showed it was writing at some point after we sent: the reply after that is new, even if
+  // its text matches the previous answer (same question asked twice).
+  let sawStreaming = false;
   let fallbackText = "";
   const ready = await waitUntil(async () => {
     await blockIfNeeded(page, site);
     const streaming = (await anyVisible(page, site.selectors.streaming)) || (await anyVisible(page, [GENERIC_STOP]));
+    if (streaming) sawStreaming = true;
     const count = await page.locator(assistantSelector).count();
     let current = "";
     const key = site.rowKeyAttr && count > 0 ? await lastKey() : null;
     const lastNow = count > 0 ? await lastReplyText() : "";
-    if (count > before || (key !== null && key !== keyBefore) || (lastNow && lastNow !== textBefore)) {
+    if (count > before || (key !== null && key !== keyBefore) || (lastNow && lastNow !== textBefore) || (sawStreaming && lastNow)) {
       current = lastNow;
       fallbackText = "";
     } else if (count === 0 && Date.now() - sentAt > 15_000) {
