@@ -16,6 +16,8 @@ Relay runs the real AI apps you already pay for inside **your own private cloud 
 &nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces_(free)-24292f?style=for-the-badge&logo=github)](https://codespaces.new/manjeetsingh-satveer/Relay?quickstart=1)
 &nbsp;
+[![Hugging Face Space](https://img.shields.io/badge/🤗_Hugging_Face-Space-ffcc4d?style=for-the-badge)](https://huggingface.co/spaces/msingh21satveer/Relay)
+&nbsp;
 [![MIT License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 &nbsp;
 [![Contributors welcome](https://img.shields.io/badge/contributors-welcome-orange?style=for-the-badge)](CONTRIBUTING.md)
