@@ -105,7 +105,12 @@ export function App() {
           </div>
         </aside>
         <main className="main">
-          {error ? <p style={{ padding: "8px 16px", color: "var(--destructive)" }}>{error}</p> : null}
+          {error && /\((404|502|503)\)/.test(error) && location.hostname.endsWith(".app.github.dev") ? (
+            <div className="row" style={{ padding: "8px 16px", gap: 12, borderBottom: "1px solid var(--border)" }}>
+              <span>Your cloud desktop went to sleep after 20 minutes without use.</span>
+              <Button size="sm" onClick={() => { location.href = "/__relay/wake"; }}>Wake it up</Button>
+            </div>
+          ) : error ? <p style={{ padding: "8px 16px", color: "var(--destructive)" }}>{error}</p> : null}
           {tab === "chat" ? (
             <Chat
               boot={boot}

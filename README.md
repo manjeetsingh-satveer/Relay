@@ -8,11 +8,13 @@ ChatGPT · Claude · Gemini · Grok · Grok Bot · Perplexity · Claude Code · 
 
 Relay runs the real AI apps you already pay for inside **your own private cloud desktop**, turns each one into a **bot** with its own chat, job and schedule, and lets you **@mention** them so they work on your task together. No API keys, nothing running on your PC.
 
-[![Download for Windows](https://img.shields.io/badge/Download-Windows-2ea44f?style=for-the-badge&logo=windows)](https://github.com/manjeetsingh-satveer/Relay/releases/latest)
+[![Download for Windows](https://img.shields.io/github/v/release/manjeetsingh-satveer/Relay?style=for-the-badge&logo=windows&label=Download%20for%20Windows&color=2ea44f)](https://github.com/manjeetsingh-satveer/Relay/releases/latest)
+&nbsp;
+[![Downloads](https://img.shields.io/github/downloads/manjeetsingh-satveer/Relay/total?style=for-the-badge&color=555)](https://github.com/manjeetsingh-satveer/Relay/releases)
+&nbsp;
+[![Stars](https://img.shields.io/github/stars/manjeetsingh-satveer/Relay?style=for-the-badge&logo=github&color=e3b341)](https://github.com/manjeetsingh-satveer/Relay/stargazers)
 &nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces_(free)-24292f?style=for-the-badge&logo=github)](https://codespaces.new/manjeetsingh-satveer/Relay?quickstart=1)
-&nbsp;
-[![Run in the cloud](https://img.shields.io/badge/Run_on-Oracle_Cloud_(free)-f80000?style=for-the-badge&logo=oracle)](docs/cloud-oracle.md)
 &nbsp;
 [![MIT License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 &nbsp;
@@ -68,9 +70,9 @@ To let scheduled bots run while your PC is off, approve **repo** and **workflow*
 
 Click **Open in Codespaces** above. Relay builds itself in your own private Codespace (about 10 minutes the first time), then you open it from your PC or phone with password + two-factor sign-in. See [docs/codespaces.md](docs/codespaces.md).
 
-### On your own always-on server (free, works from your phone)
+### Optional: your own always-on server instead of Codespaces
 
-Follow **[docs/cloud-oracle.md](docs/cloud-oracle.md)**: create a free Oracle Cloud Ampere server, run one setup command, then open Relay over Tailscale on your laptop and phone. Cloud mode needs a password plus an authenticator code, with recovery codes, and nothing is exposed to the public internet.
+Relay normally runs in GitHub Codespaces (above). If you'd rather have a server that never sleeps, follow **[docs/cloud-oracle.md](docs/cloud-oracle.md)**: create a free Oracle Cloud Ampere server, run one setup command, then open Relay over Tailscale on your laptop and phone. Cloud mode needs a password plus an authenticator code, with recovery codes, and nothing is exposed to the public internet.
 
 ## Supported tools
 

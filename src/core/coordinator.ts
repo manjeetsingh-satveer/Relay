@@ -180,6 +180,13 @@ export class Coordinator {
         }
       }
 
+      // A bot always answers with its own AI. If that AI fails, the bot reports it; it never
+      // quietly hands the work to a different AI under the bot's name.
+      const ownerBot = this.store.data.bots.find((item) => item.conversationId === input.conversationId);
+      if (ownerBot) {
+        decision = { ...decision, fallbacks: [], explanation: `${ownerBot.name} uses only ${decision.steps[0] ? decision.steps[0].adapterId : ownerBot.agentId}. ${decision.explanation}` };
+      }
+
       await this.store.update((data) => {
         const task = data.tasks.find((item) => item.id === taskId);
         if (task) task.routeExplanation = decision.explanation;
@@ -294,7 +301,8 @@ export class Coordinator {
           siteId: view.id,
           prompt,
           continuedUrl: continued ? session?.providerSessionId : undefined,
-          timeoutMs: Math.min(this.store.data.settings.limits.maxWallClockMs, 4 * 60 * 1000), // one stuck site must not eat the whole task
+          // One stuck site must not eat the whole task. Grok Bot works like an agent and often needs longer.
+          timeoutMs: Math.min(this.store.data.settings.limits.maxWallClockMs, (view.id === "grok-bot" ? 15 : 4) * 60 * 1000),
           signal,
         });
       } else if (meta.credential === "vm-cli") {

@@ -147,6 +147,13 @@ if (!KEEPALIVE) app.whenReady().then(async () => {
       .catch(() => undefined);
   }
   const openCloud = () => window.loadURL(`${local}#cloud`);
+  // The cloud page asks to be woken up (its Codespace went to sleep): go back to the launcher, which wakes it.
+  window.webContents.on("will-navigate", (event, url) => {
+    if (/\.app\.github\.dev\/__relay\/wake/.test(url)) {
+      event.preventDefault();
+      void openCloud();
+    }
+  });
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {

@@ -641,7 +641,7 @@ export async function startServer(options: {
         const reply = [...store.data.messages].reverse().find((item) => item.taskId === task.id && item.role === "assistant");
         if (finished?.status === "completed" && reply) {
           replies.push(`${bot.name}: ${reply.text}`);
-          await postToOrigin(originId, { role: "assistant", text: `**@${bot.name}**\n\n${reply.text}`, adapterId: bot.agentId });
+          await postToOrigin(originId, { role: "assistant", text: `**@${bot.name}**\n\n${reply.text}`, adapterId: reply.adapterId ?? bot.agentId });
         } else {
           await postToOrigin(originId, { role: "notice", text: `@${bot.name} couldn't finish: ${finished?.error ?? finished?.status ?? "no reply"}. Open its chat for details.` });
         }
