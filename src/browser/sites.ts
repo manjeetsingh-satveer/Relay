@@ -29,6 +29,8 @@ export interface SiteDefinition {
   startClick?: string;
   /** Attribute that identifies a reply row, for apps that only keep visible rows on screen. */
   rowKeyAttr?: string;
+  /** Removed from the start of a copied reply (e.g. the app printing the bot name). */
+  stripPrefix?: RegExp;
   selectors: SiteSelectors;
 }
 
@@ -51,6 +53,8 @@ export const WEB_SITES: SiteDefinition[] = [
     desktopApp: true,
     startClick: "[aria-label='Grok Bot, Main Bot']",
     rowKeyAttr: "data-row-key",
+    stripPrefix: /^Grok Bots*
++/,
     termsUrl: "https://x.ai/legal/terms-of-service",
     termsNote: "xAI's terms apply to Grok Bot. Relay types into the Grok Bot window you signed in to, on your own desktop.",
     // Unconfirmed guesses until checked against a signed-in Grok Bot window.
@@ -58,7 +62,7 @@ export const WEB_SITES: SiteDefinition[] = [
       // Checked against a signed-in Grok Bot 1.2.3 window on 24 Nov 2026. Enter sends.
       composer: [fixture, "[role='textbox'][aria-label='Prompt']"],
       send: ["[data-relay='send']"],
-      assistant: ["[data-relay='assistant']", "[data-row-key][data-role='assistant']"],
+      assistant: ["[data-relay='assistant']", "[data-row-key] [data-role='assistant']"],
       code: ["pre code"],
       login: ["[data-relay='login']", "button:text-is('Sign in')"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],

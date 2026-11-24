@@ -48,7 +48,11 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
   }
   const assistantSelector = site.selectors.assistant.join(", ");
   const before = await page.locator(assistantSelector).count();
-  const lastKey = async () => (site.rowKeyAttr ? await page.locator(assistantSelector).last().getAttribute(site.rowKeyAttr, { timeout: 1000 }).catch(() => null) : null);
+  const rowKeyAttr = site.rowKeyAttr;
+  const lastKey = async () =>
+    rowKeyAttr
+      ? await page.locator(assistantSelector).last().evaluate((el, attr) => el.closest(`[${attr}]`)?.getAttribute(attr) ?? null, rowKeyAttr, { timeout: 1000 }).catch(() => null)
+      : null;
   const keyBefore = await lastKey();
   const bodyBefore = await pageText(page);
   const tag = await composer.evaluate((el) => el.tagName.toLowerCase());
@@ -100,7 +104,8 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
     throw new RelayError("timeout", `${site.label}: timed out waiting for the page to finish. No reply was copied.`);
   }
   const last = page.locator(assistantSelector).last();
-  const text = fallbackText || (await last.innerText()).trim();
+  const raw = fallbackText || (await last.innerText()).trim();
+  const text = site.stripPrefix ? raw.replace(site.stripPrefix, "").trim() : raw;
   if (!text) throw new RelayError("empty", `${site.label}: the new message was empty. Nothing was invented.`);
   const files = fallbackText ? extractFencedFiles(text).map((file) => ({ name: file.name, bytes: Buffer.from(file.text, "utf8"), mediaType: mediaTypeFor(file.name), source: `Copied from the page (${site.label}). Page content is untrusted.` })) : await filesFrom(last, site, text);
   return { text, files, pageUrl: page.url() };
