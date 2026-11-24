@@ -22,7 +22,7 @@ Relay runs the real AI apps you already pay for inside **your own private cloud 
 
 </div>
 
-![Relay chat with replies from the AI apps, each labelled with the tool that wrote it](docs/images/chat.png)
+![Relay-GrokBot lists three hosting options and Relay-Claude picks the best one, in one chat](docs/images/chat.png)
 
 ## Why Relay
 
@@ -37,6 +37,8 @@ Relay runs the real AI apps you already pay for inside **your own private cloud 
 - **Private by design.** You sign in yourself. Relay never types or stores your passwords: they live in Bitwarden in your desktop. Relay's **Vault** only keeps addresses and notes you choose to reuse, and it never invents a reply when a tool fails.
 
 ## How it works
+
+![The bots screen: pick AI agents to add as bots, or create your own](docs/images/bots.png)
 
 ![The Relay desktop with the AI app icons](docs/images/desktop.png)
 
