@@ -125,3 +125,33 @@ describe("mentions", () => {
     expect(findMentions("@all go", all)).toHaveLength(3);
   });
 });
+
+describe("bots per chat", () => {
+  it("only the chat's bots answer @mentions, and chats can be renamed and deleted", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "relay-chatbots-"));
+    const server = await startServer({ port: 0, dataDir: dir, secretStore: new MemorySecretStore() });
+    try {
+      const base = `http://127.0.0.1:${server.port}`;
+      const post = (url: string, body: unknown, method = "POST") => fetch(base + url, { method, body: JSON.stringify(body) });
+      const claude = (await (await post("/api/bots", { name: "Relay-Claude", agentId: "claude-web" })).json()) as Bot;
+      const grok = (await (await post("/api/bots", { name: "Relay-GrokBot", agentId: "grok-bot" })).json()) as Bot;
+      const general = server.store.data.conversations.find((item) => item.title === "General")!;
+      expect((await post(`/api/conversations/${general.id}`, { botIds: [claude.id], title: "Hosting" }, "PATCH")).status).toBe(200);
+      expect(server.store.conversation(general.id)?.botIds).toEqual([claude.id]);
+      expect(server.store.conversation(general.id)?.title).toBe("Hosting");
+      // Grok Bot was removed from this chat, so @Relay-GrokBot is not a mention here.
+      const sent = await post(`/api/conversations/${general.id}/messages`, { text: "@Relay-GrokBot hi", idempotencyKey: "k1", mode: "single" });
+      const notices = server.store.data.messages.filter((item) => item.conversationId === general.id && item.role === "notice");
+      expect(notices.some((item) => item.text.includes("Sent to @Relay-GrokBot"))).toBe(false);
+      void sent; void grok;
+      const botChat = await post(`/api/conversations/${claude.conversationId}`, { title: "x" }, "PATCH");
+      expect(botChat.status).toBe(400);
+      const fresh = (await (await post("/api/conversations", { projectId: general.projectId })).json()) as { id: string };
+      expect((await fetch(`${base}/api/conversations/${fresh.id}`, { method: "DELETE" })).status).toBe(204);
+      expect(server.store.conversation(fresh.id)).toBeUndefined();
+    } finally {
+      await server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

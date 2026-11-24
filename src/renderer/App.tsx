@@ -171,10 +171,18 @@ function Projects(props: {
         </Button>
       ) : null}
       <div style={{ display: "grid", gap: 2 }}>
-        {[...conversations].reverse().map((conversation) => (
-          <button key={conversation.id} onClick={() => props.onConversation(conversation.id)} style={{ background: props.conversationId === conversation.id ? "var(--card)" : "transparent", border: 0, borderRadius: 8, textAlign: "left", color: props.conversationId === conversation.id ? "var(--primary)" : "inherit", padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {conversation.title}
-          </button>
+        {[...conversations].reverse().filter((conversation) => !props.boot.bots.some((item) => item.conversationId === conversation.id)).map((conversation) => (
+          <div key={conversation.id} className="row chat-item" style={{ gap: 0, background: props.conversationId === conversation.id ? "var(--card)" : "transparent", borderRadius: 8 }}>
+            <button onClick={() => props.onConversation(conversation.id)} style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, textAlign: "left", color: props.conversationId === conversation.id ? "var(--primary)" : "inherit", padding: "6px 8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {conversation.title}
+            </button>
+            {props.conversationId === conversation.id ? (
+              <>
+                <button title="Rename" aria-label="Rename chat" style={{ background: "transparent", border: 0, color: "var(--muted-foreground)", padding: "0 4px" }} onClick={() => { const title = prompt("Rename chat", conversation.title); if (title?.trim()) api.updateConversation(conversation.id, { title }).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>✎</button>
+                <button title="Delete" aria-label="Delete chat" style={{ background: "transparent", border: 0, color: "var(--muted-foreground)", padding: "0 6px" }} onClick={() => { if (confirm(`Delete "${conversation.title}"? Its messages are removed. This can't be undone.`)) api.deleteConversation(conversation.id).then(props.refresh).catch((reason) => props.onError(reason.message)); }}>🗑</button>
+              </>
+            ) : null}
+          </div>
         ))}
       </div>
       <Label style={{ marginTop: 12 }}>Projects</Label>
@@ -226,6 +234,12 @@ function Chat(props: {
   const ready = props.boot.integrations.filter((item) => item.availableForRouting);
   const running = props.thread?.tasks.some((task) => task.status === "running") ?? false;
   const bot = props.boot.bots.find((item) => item.conversationId === props.conversationId);
+  const chat = props.boot.conversations.find((item) => item.id === props.conversationId);
+  const chatBots = props.boot.bots.filter((item) => !chat?.botIds || chat.botIds.includes(item.id));
+  const otherBots = props.boot.bots.filter((item) => !chatBots.includes(item));
+  const setChatBots = (ids: string[]) => {
+    if (props.conversationId) api.updateConversation(props.conversationId, { botIds: ids }).catch((reason) => props.onError(reason.message));
+  };
 
   if (!props.conversationId || !props.thread) {
     return <div className="scroll" style={{ padding: 28 }}><h1 className="serif" style={{ fontWeight: 500 }}>Start with a project.</h1><p style={{ maxWidth: 560, color: "var(--muted-foreground)" }}>Relay does not answer by itself. Start the Linux VM, sign in to Claude or ChatGPT in that desktop, then send a task. If the browser is not signed in, the task stops and says so. API keys stay off unless you enable them.</p></div>;
@@ -348,13 +362,23 @@ function Chat(props: {
           <span className="badge">{props.boot.settings.router === "drex" ? "Drex routing" : "Local rules"}</span>
           {running ? <span className="badge info">Task running</span> : null}
         </div>
-        {props.boot.bots.filter((item) => item.id !== bot?.id).length ? (
+        {!bot && props.boot.bots.length ? (
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Ask a bot:</span>
-            {props.boot.bots.filter((item) => item.id !== bot?.id).map((item) => (
-              <Button key={item.id} type="button" size="sm" variant="outline" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@${item.name} `)}>@{item.name}</Button>
+            <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Bots in this chat:</span>
+            {chatBots.map((item) => (
+              <span key={item.id} className="row" style={{ gap: 0 }}>
+                <Button type="button" size="sm" variant="outline" title={`Insert @${item.name}`} onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@${item.name} `)}>@{item.name}</Button>
+                <Button type="button" size="sm" variant="ghost" title={`Remove ${item.name} from this chat`} aria-label={`Remove ${item.name} from this chat`} onClick={() => setChatBots(chatBots.filter((other) => other.id !== item.id).map((other) => other.id))}>×</Button>
+              </span>
             ))}
-            {props.boot.bots.length > 1 && !bot ? <Button type="button" size="sm" variant="ghost" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@all `)}>@all</Button> : null}
+            {chatBots.length > 1 ? <Button type="button" size="sm" variant="ghost" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@all `)}>@all</Button> : null}
+            {otherBots.length ? (
+              <select value="" onChange={(event) => { if (event.target.value) setChatBots([...chatBots.map((item) => item.id), event.target.value]); }}>
+                <option value="">+ Add bot</option>
+                {otherBots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            ) : null}
+            {chatBots.length === 0 ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No bots here. Add one, or just type to use Team mode.</span> : null}
           </div>
         ) : null}
         <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={bot ? `Message ${bot.name}` : "Type a task, or @mention bots to hand it to them."} required />

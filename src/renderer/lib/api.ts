@@ -7,7 +7,7 @@ export interface Bootstrap {
   health: HealthInfo;
   settings: Settings;
   projects: { id: string; name: string; repoUrl?: string; createdAt: string }[];
-  conversations: { id: string; projectId: string; title: string; createdAt: string; updatedAt: string }[];
+  conversations: { id: string; projectId: string; title: string; createdAt: string; updatedAt: string; botIds?: string[] }[];
   contacts: { id: string; name: string; phone: string; notes: string; createdAt: string }[];
   bots: BotView[];
   alarm: { ok: boolean; detail: string; at: string; repoUrl?: string } | null;
@@ -67,6 +67,9 @@ export const api = {
   createConversation: (projectId: string) =>
     request<Bootstrap["conversations"][number]>("/api/conversations", { method: "POST", body: JSON.stringify({ projectId }) }),
   conversation: (id: string) => request<ConversationPayload>(`/api/conversations/${id}`),
+  updateConversation: (id: string, body: { title?: string; botIds?: string[] | null }) =>
+    request(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteConversation: (id: string) => request(`/api/conversations/${id}`, { method: "DELETE" }),
   send: (id: string, body: { text: string; mode: "single" | "collaborative" | "team"; idempotencyKey: string; agentId?: string }) =>
     request<{ task: TaskRecord | null; call: CallResolution | null }>(`/api/conversations/${id}/messages`, {
       method: "POST",

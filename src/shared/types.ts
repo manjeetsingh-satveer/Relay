@@ -149,6 +149,8 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   sessions: Partial<Record<IntegrationId, ProviderSession>>;
+  /** Bots that can be @mentioned in this chat. Missing = every bot. */
+  botIds?: string[];
 }
 
 export interface Project {

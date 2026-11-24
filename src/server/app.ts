@@ -239,6 +239,34 @@ export async function startServer(options: {
         artifacts: store.data.artifacts.filter((item) => item.conversationId === id),
       });
     }
+    if (conversationMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = conversationMatch[1]!;
+      const conversation = store.conversation(id);
+      if (!conversation) throw new RelayError("not_found", "Conversation not found.", 404);
+      if (store.data.bots.some((item) => item.conversationId === id)) throw new RelayError("invalid", "This is a bot's own chat. Remove the bot on the bots tab instead.");
+      if (method === "DELETE") {
+        if (store.data.tasks.some((task) => task.conversationId === id && task.status === "running")) throw new RelayError("busy", "A task is still running in this chat.");
+        await store.update((data) => {
+          data.conversations = data.conversations.filter((item) => item.id !== id);
+          data.messages = data.messages.filter((item) => item.conversationId !== id);
+        });
+        notify();
+        return send(response, 204, null);
+      }
+      const body = await json(request);
+      const title = optionalString(body, "title")?.trim().slice(0, 120);
+      const botIds = Array.isArray(body.botIds) ? body.botIds.filter((item): item is string => typeof item === "string" && store.data.bots.some((bot) => bot.id === item)) : body.botIds === null ? null : undefined;
+      await store.update((data) => {
+        const target = data.conversations.find((item) => item.id === id);
+        if (!target) return;
+        if (title) target.title = title;
+        if (botIds === null) delete target.botIds;
+        else if (botIds) target.botIds = [...new Set(botIds)];
+        target.updatedAt = new Date().toISOString();
+      });
+      notify();
+      return send(response, 200, store.conversation(id));
+    }
     const messageMatch = url.pathname.match(/^\/api\/conversations\/([^/]+)\/messages$/);
     if (method === "POST" && messageMatch) {
       const id = messageMatch[1]!;
@@ -250,7 +278,8 @@ export async function startServer(options: {
       const mode = ownerBot ? "single" : body.mode === "collaborative" || body.mode === "team" ? body.mode : "single";
       if (!text || !idempotencyKey) throw new RelayError("invalid", "text and idempotencyKey are required.");
       const requested = ownerBot ? ownerBot.agentId : optionalIntegration(body, "agentId");
-      const mentioned = findMentions(text, store.data.bots).filter((item) => item.id !== ownerBot?.id);
+      const chatBots = store.data.bots.filter((item) => { const ids = store.conversation(id)?.botIds; return !ids || ids.includes(item.id); });
+      const mentioned = findMentions(text, chatBots).filter((item) => item.id !== ownerBot?.id);
       if (mentioned.length > 0) {
         const existing = store.submission(idempotencyKey);
         if (existing) return send(response, 200, { call: null, task: store.task(existing.taskId) ?? null });
@@ -266,6 +295,11 @@ export async function startServer(options: {
           data.submissions.push({ key: idempotencyKey, taskId, conversationId: id });
           data.messages.push({ id: createId(), conversationId: id, role: "user", text, createdAt: now, taskId });
           data.messages.push({ id: createId(), conversationId: id, role: "notice", text: detail, createdAt: now, taskId });
+          const chat = data.conversations.find((item) => item.id === id);
+          if (chat && chat.title === "New conversation") {
+            chat.title = text.slice(0, 72);
+            chat.updatedAt = now;
+          }
         });
         notify();
         void runMentions(id, mentioned, text);
