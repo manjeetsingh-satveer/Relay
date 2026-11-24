@@ -74,6 +74,9 @@ export function App() {
           <div className="brand">
             <strong>RELAY</strong>
             <span>One chat across the tools you already pay for.</span>
+            <a href="https://github.com/manjeetsingh-satveer/Relay" target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--primary)", marginTop: 4 }}>
+              ⭐ Free and open source. Star it on GitHub
+            </a>
           </div>
           <div className="nav">
             {(["chat", "bots", "computer", "vault", "integrations", "settings"] as Tab[]).map((item) => (
