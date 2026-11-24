@@ -87,6 +87,8 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
       current = newLines(bodyBefore, await pageText(page), input.prompt);
       fallbackText = current;
     }
+    // A "… is typing" placeholder is never the answer.
+    if (/is typing|^Typing…?$/im.test(current)) current = "";
     if (current && !streaming && current === lastText) stable += 1;
     else stable = 0;
     lastText = current;

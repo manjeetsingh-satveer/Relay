@@ -66,7 +66,8 @@ export const WEB_SITES: SiteDefinition[] = [
       login: ["[data-relay='login']", "button:text-is('Sign in')"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']"],
       rateLimit: ["[data-relay='limit']", "text=/usage limit|rate limit|message limit/i"],
-      streaming: ["[data-relay='streaming']"],
+      // While Grok Bot works it shows a "Grok Bot is typing / Typing…" row, sometimes for minutes.
+      streaming: ["[data-relay='streaming']", "text=/is typing|^Typing…$/"],
       stop: ["[data-relay='stop']", "button[aria-label*='Stop' i]"],
     },
   },
