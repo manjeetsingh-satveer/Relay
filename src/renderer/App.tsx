@@ -245,150 +245,229 @@ function Chat(props: {
     return <div className="scroll" style={{ padding: 28 }}><h1 className="serif" style={{ fontWeight: 500 }}>Start with a project.</h1><p style={{ maxWidth: 560, color: "var(--muted-foreground)" }}>Relay does not answer by itself. Start the Linux VM, sign in to Claude or ChatGPT in that desktop, then send a task. If the browser is not signed in, the task stops and says so. API keys stay off unless you enable them.</p></div>;
   }
 
+  const send = async () => {
+    if (!props.conversationId || !text.trim() || busy || running) return;
+    const key = pendingKey.current ?? crypto.randomUUID();
+    pendingKey.current = key;
+    setBusy(true);
+    props.onError("");
+    try {
+      const result = await api.send(props.conversationId, { text, mode, idempotencyKey: key, agentId: agentId === "auto" ? undefined : agentId });
+      pendingKey.current = null;
+      setText("");
+      await props.onSent(result.call);
+    } catch (reason) {
+      props.onError(reason instanceof Error ? reason.message : "Send failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const insert = (token: string) => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}${token} `);
+
+  // Which mentioned bots are still working (their reply hasn't come back to this chat yet).
+  const waiting: string[] = [];
+  {
+    const messages = props.thread.messages;
+    const lastUser = messages.map((item) => item.role).lastIndexOf("user");
+    const sent = messages.slice(lastUser + 1).find((item) => item.role === "notice" && item.text.startsWith("Sent to @"));
+    if (sent) {
+      const names = [...sent.text.matchAll(/@([\w.-]+)/g)].map((match) => match[1]!);
+      const after = messages.slice(lastUser + 1);
+      for (const name of names) {
+        const done = after.some((item) => item.text.startsWith(`**@${name}**`) || item.text.startsWith(`@${name} couldn't`));
+        if (!done) waiting.push(name);
+      }
+    }
+  }
+  const runningTask = props.thread.tasks.find((task) => task.status === "running");
+  const failedTasks = props.thread.tasks.filter((task) => (task.status === "failed" || task.status === "interrupted") && task.error);
+  const visible = props.thread.messages.filter((message) => {
+    if (message.role !== "notice") return true;
+    if (message.text.startsWith("Sent to @")) return false; // shown as "working" indicators instead
+    if (message.adapterId) return false; // browser-thread details
+    if (/^Saved \d+ file/.test(message.text)) return false;
+    return true;
+  });
+
   return (
-    <>
+    <div className="chat">
       {bot ? (
-        <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)" }}>
-          <strong>{bot.name}</strong>
-          <span style={{ color: "var(--muted-foreground)", fontSize: 13 }}> · {agentName(props.boot, bot.agentId)}{bot.job ? ` · ${bot.job}` : ""}</span>
+        <div className="chat-header">
+          <Avatar name={bot.name} agentId={bot.agentId} />
+          <div style={{ minWidth: 0 }}>
+            <strong>{bot.name}</strong>
+            <div className="chat-sub">{agentName(props.boot, bot.agentId)}{bot.job ? ` · ${bot.job}` : ""}</div>
+          </div>
         </div>
       ) : null}
       <div className="scroll transcript">
-        {props.thread.messages.length === 0 ? <p style={{ color: "var(--muted-foreground)" }}>This conversation is empty.</p> : null}
-        {props.thread.messages.map((message) => (
-          <article key={message.id} className={`bubble ${message.role}`}>
-            {message.role === "assistant" ? <div className="badge">{message.adapterId}</div> : null}
-            {(() => {
-              // Bot replies start with "**@Name**": show the name in bold instead of raw asterisks.
-              const header = /^\*\*(@[^*\n]+)\*\*\n+/.exec(message.text);
-              return header ? (
-                <>
-                  <strong style={{ display: "block", marginBottom: 6 }}>{header[1]}</strong>
-                  <div style={{ whiteSpace: "pre-wrap" }}>{message.text.slice(header[0].length)}</div>
-                </>
-              ) : <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>;
-            })()}
-          </article>
-        ))}
-        {props.thread.tasks.map((task) => (
-          <section key={task.id} className="card">
-            <div className="row">
-              <span className={`badge ${task.status === "completed" ? "good" : task.status === "running" ? "info" : "bad"}`}>{task.status}</span>
-              <span style={{ color: "var(--muted-foreground)", fontSize: 12 }}>{formatWhen(task.updatedAt)}</span>
+        <div className="column">
+          {visible.length === 0 ? (
+            <div className="empty">
+              <h2 className="serif">{bot ? `Message ${bot.name}` : "What should your bots work on?"}</h2>
+              <p>{bot ? bot.job || "This bot answers with its own AI." : chatBots.length ? "Type a task, or @mention bots so they hand it to each other." : "Type a task. Team mode lets several AIs discuss it."}</p>
+              {!bot && chatBots.length > 1 ? (
+                <button type="button" className="suggestion" onClick={() => setText(`@${chatBots[0]!.name} give me 3 ideas for a weekend project, then @${chatBots[1]!.name} pick the best one`)}>
+                  @{chatBots[0]!.name} give me 3 ideas for a weekend project, then @{chatBots[1]!.name} pick the best one
+                </button>
+              ) : null}
             </div>
-            {task.progress.length > 0 ? (
-              <p style={{ margin: "6px 0", fontSize: 13 }}>{task.progress[task.progress.length - 1]!.message}</p>
-            ) : null}
-            <details>
-              <summary style={{ cursor: "pointer", color: "var(--muted-foreground)", fontSize: 13 }}>Details ({task.progress.length} steps)</summary>
-              {task.routeExplanation ? <p style={{ fontSize: 13 }}>{task.routeExplanation}</p> : null}
-              {task.progress.map((event, index) => (
-                <p key={index} style={{ color: "var(--muted-foreground)", fontSize: 13 }}>{formatWhen(event.at)} — {event.message}</p>
-              ))}
-            </details>
-            {task.contributions.map((contribution) => (
-              <div key={contribution.id}>
-                <strong>{contribution.adapterId}</strong> · {contribution.role} · {contribution.sessionMode}
-                <p>{contribution.sessionDetail}</p>
-                {contribution.usage?.reportedCostUsd !== undefined ? <p>Reported cost {contribution.usage.reportedCostUsd} USD ({contribution.usage.costSource}).</p> : null}
-                {contribution.citations?.length ? (
-                  <ul>{contribution.citations.map((citation) => <li key={citation.url}><a href={citation.url}>{citation.title}</a></li>)}</ul>
-                ) : null}
-              </div>
-            ))}
-            {task.error ? <p style={{ color: "var(--destructive)" }}>{task.error}</p> : null}
-            {task.status === "running" ? <Button size="sm" variant="outline" onClick={() => api.cancel(task.id).catch((reason) => props.onError(reason.message))}>Cancel</Button> : null}
-            {task.status !== "running" && task.providerStarted ? (
-              <div className="row">
-                <Button size="sm" variant="outline" onClick={() => api.retry(task.id, crypto.randomUUID(), false).then(() => props.onSent(null)).catch((reason) => props.onError(reason.message))}>Retry same session</Button>
-                <Button size="sm" variant="ghost" onClick={() => api.retry(task.id, crypto.randomUUID(), true).then(() => props.onSent(null)).catch((reason) => props.onError(reason.message))}>Retry as a new session</Button>
-              </div>
-            ) : null}
-          </section>
-        ))}
-        {props.thread.artifacts.length > 0 ? (
-          <section className="card">
-            <h2 className="serif" style={{ margin: "0 0 8px", fontWeight: 500 }}>Files</h2>
-            {props.thread.artifacts.map((artifact) => (
-              <p key={artifact.id}><a href={`/api/artifacts/${artifact.id}`}>{artifact.name}</a> · {formatBytes(artifact.bytes)} · {artifact.source}</p>
-            ))}
-          </section>
-        ) : null}
-      </div>
-      <form
-        className="composer"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!props.conversationId) return;
-          const key = pendingKey.current ?? crypto.randomUUID();
-          pendingKey.current = key;
-          setBusy(true);
-          props.onError("");
-          try {
-            const result = await api.send(props.conversationId, {
-              text,
-              mode,
-              idempotencyKey: key,
-              agentId: agentId === "auto" ? undefined : agentId,
-            });
-            pendingKey.current = null;
-            setText("");
-            await props.onSent(result.call);
-          } catch (reason) {
-            props.onError(reason instanceof Error ? `${reason.message} The same request id will be reused if you send again.` : "Send failed.");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <div className="row" style={bot ? { display: "none" } : undefined}>
-          <Label>Mode</Label>
-          <select value={mode} onChange={(event) => setMode(event.target.value as "single" | "collaborative" | "team")}>
-            <option value="single">Single agent</option>
-            <option value="team">Team: agents discuss, lead answers</option>
-            <option value="collaborative">Draft, review, revise</option>
-          </select>
-          {props.boot.vault.length ? (
-            <select value="" onChange={(event) => { const item = props.boot.vault.find((entry) => entry.id === event.target.value); if (item) setText((current) => (current ? current + "\n" : "") + item.value); }}>
-              <option value="">Insert from vault…</option>
-              {props.boot.vault.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
           ) : null}
-          <Label>Agent</Label>
-          <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
-            <option value="auto">Auto</option>
-            {ready.map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
-          </select>
-          <span className="badge">{props.boot.settings.router === "drex" ? "Drex routing" : "Local rules"}</span>
-          {running ? <span className="badge info">Task running</span> : null}
+          {visible.map((message) => {
+            if (message.role === "user") return <div key={message.id} className="msg-user">{message.text}</div>;
+            if (message.role === "notice") return <div key={message.id} className={`msg-note ${/couldn't|failed|not available/i.test(message.text) ? "bad" : ""}`}>{message.text}</div>;
+            const header = /^\*\*@([^*\n]+)\*\*\n+/.exec(message.text);
+            const name = header ? header[1]! : bot?.name ?? agentName(props.boot, message.adapterId ?? "");
+            const body = header ? message.text.slice(header[0].length) : message.text;
+            return (
+              <div key={message.id} className="msg-ai">
+                <Avatar name={name} agentId={message.adapterId} />
+                <div className="msg-ai-body">
+                  <div className="msg-ai-name">{name} <span>{message.adapterId ? agentName(props.boot, message.adapterId) : ""}</span></div>
+                  <Markdown text={body} />
+                  <button type="button" className="msg-copy" onClick={() => void navigator.clipboard?.writeText(body)}>Copy</button>
+                </div>
+              </div>
+            );
+          })}
+          {[...waiting.map((name) => ({ key: name, label: `@${name} is working…` })), ...(runningTask && waiting.length === 0 ? [{ key: runningTask.id, label: bot ? `${bot.name} is working…` : "Working…" }] : [])].map((item) => (
+            <div key={item.key} className="msg-working">
+              <span className="dots"><i /><i /><i /></span> {item.label}
+              {runningTask ? <button type="button" onClick={() => api.cancel(runningTask.id).catch((reason) => props.onError(reason.message))}>Stop</button> : null}
+            </div>
+          ))}
+          {failedTasks.slice(-1).map((task) => (
+            <div key={task.id} className="msg-note bad">
+              {task.error}{" "}
+              {task.providerStarted ? <button type="button" className="link" onClick={() => api.retry(task.id, crypto.randomUUID(), false).then(() => props.onSent(null)).catch((reason) => props.onError(reason.message))}>Retry</button> : null}
+            </div>
+          ))}
+          {props.thread.artifacts.length > 0 ? (
+            <div className="msg-files">
+              {props.thread.artifacts.map((artifact) => (
+                <a key={artifact.id} href={`/api/artifacts/${artifact.id}`}>📄 {artifact.name} <span>{formatBytes(artifact.bytes)}</span></a>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {!bot && props.boot.bots.length ? (
-          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Bots in this chat:</span>
-            {chatBots.map((item) => (
-              <span key={item.id} className="row" style={{ gap: 0 }}>
-                <Button type="button" size="sm" variant="outline" title={`Insert @${item.name}`} onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@${item.name} `)}>@{item.name}</Button>
-                <Button type="button" size="sm" variant="ghost" title={`Remove ${item.name} from this chat`} aria-label={`Remove ${item.name} from this chat`} onClick={() => setChatBots(chatBots.filter((other) => other.id !== item.id).map((other) => other.id))}>×</Button>
-              </span>
-            ))}
-            {chatBots.length > 1 ? <Button type="button" size="sm" variant="ghost" onClick={() => setText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}@all `)}>@all</Button> : null}
-            {otherBots.length ? (
-              <select value="" onChange={(event) => { if (event.target.value) setChatBots([...chatBots.map((item) => item.id), event.target.value]); }}>
-                <option value="">+ Add bot</option>
-                {otherBots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            ) : null}
-            {chatBots.length === 0 ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>No bots here. Add one, or just type to use Team mode.</span> : null}
+      </div>
+      <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+        <div className="column">
+          <div className="composer-box">
+            <Textarea
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }}
+              placeholder={bot ? `Message ${bot.name}` : chatBots.length ? "Message your bots… (@mention to hand off)" : "Message Relay…"}
+              rows={1}
+            />
+            <div className="composer-bar">
+              {!bot ? chatBots.map((item) => (
+                <span key={item.id} className="chip">
+                  <button type="button" title={`Mention ${item.name}`} onClick={() => insert(`@${item.name}`)}>@{item.name}</button>
+                  <button type="button" className="chip-x" title={`Remove ${item.name} from this chat`} aria-label={`Remove ${item.name} from this chat`} onClick={() => setChatBots(chatBots.filter((other) => other.id !== item.id).map((other) => other.id))}>×</button>
+                </span>
+              )) : null}
+              {!bot && chatBots.length > 1 ? <span className="chip"><button type="button" onClick={() => insert("@all")}>@all</button></span> : null}
+              {!bot && otherBots.length ? (
+                <select className="chip-select" value="" onChange={(event) => { if (event.target.value) setChatBots([...chatBots.map((item) => item.id), event.target.value]); }}>
+                  <option value="">+ Add bot</option>
+                  {otherBots.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              ) : null}
+              <span style={{ flex: 1 }} />
+              {props.boot.vault.length ? (
+                <select className="chip-select" value="" title="Insert from vault" onChange={(event) => { const item = props.boot.vault.find((entry) => entry.id === event.target.value); if (item) setText((current) => (current ? current + "\n" : "") + item.value); }}>
+                  <option value="">Vault</option>
+                  {props.boot.vault.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                </select>
+              ) : null}
+              {!bot ? (
+                <select className="chip-select" value={agentId === "auto" ? mode : `agent:${agentId}`} title="How Relay answers when you don't @mention a bot" onChange={(event) => {
+                  const value = event.target.value;
+                  if (value.startsWith("agent:")) { setMode("single"); setAgentId(value.slice(6)); } else { setMode(value as "single" | "collaborative" | "team"); setAgentId("auto"); }
+                }}>
+                  <option value="team">Team</option>
+                  <option value="single">Best single AI</option>
+                  <option value="collaborative">Draft + review</option>
+                  {ready.map((item) => <option key={item.id} value={`agent:${item.id}`}>{item.displayName} only</option>)}
+                </select>
+              ) : null}
+              <button type="submit" className="send" disabled={busy || running || !text.trim()} aria-label="Send">↑</button>
+            </div>
           </div>
-        ) : null}
-        <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={bot ? `Message ${bot.name}` : "Type a task, or @mention bots to hand it to them."} required />
-        <div className="row">
-          <Button type="submit" disabled={busy || running}>{busy ? "Sending…" : "Send"}</Button>
-          {pendingKey.current ? <span style={{ color: "var(--info)", fontSize: 12 }}>A previous send did not finish. The next click reuses its request id.</span> : null}
+          <div className="composer-hint">Relay copies replies from your own AI apps. Check important answers.</div>
         </div>
       </form>
-    </>
+    </div>
   );
+}
+
+const AGENT_COLORS: Record<string, string> = {
+  "claude-web": "#d97757", "claude-code": "#d97757", "chatgpt-web": "#10a37f", "gemini-web": "#4285f4",
+  "grok-web": "#9aa0a6", "grok-bot": "#e8e8e8", "perplexity-web": "#20b8cd", "cursor-cli": "#7c7cff",
+};
+
+function Avatar(props: { name: string; agentId?: string }) {
+  const color = AGENT_COLORS[props.agentId ?? ""] ?? "#e08a3c";
+  const letter = props.name.replace(/^Relay-/, "").charAt(0).toUpperCase() || "R";
+  return <span className="avatar" style={{ background: color, color: color === "#e8e8e8" ? "#111" : "#fff" }}>{letter}</span>;
+}
+
+/** Small, safe Markdown: paragraphs, lists, **bold**, `code`, ``` blocks and links. No HTML is injected. */
+function Markdown(props: { text: string }) {
+  const blocks: ReactNode[] = [];
+  const lines = props.text.replace(/\r\n/g, "\n").split("\n");
+  let i = 0;
+  const inline = (value: string, key: string): ReactNode[] => {
+    const parts: ReactNode[] = [];
+    const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    let n = 0;
+    while ((match = pattern.exec(value))) {
+      if (match.index > last) parts.push(value.slice(last, match.index));
+      const token = match[0];
+      if (token.startsWith("**")) parts.push(<strong key={`${key}-${n++}`}>{token.slice(2, -2)}</strong>);
+      else if (token.startsWith("`")) parts.push(<code key={`${key}-${n++}`}>{token.slice(1, -1)}</code>);
+      else {
+        const link = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/.exec(token)!;
+        parts.push(<a key={`${key}-${n++}`} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>);
+      }
+      last = match.index + token.length;
+    }
+    if (last < value.length) parts.push(value.slice(last));
+    return parts;
+  };
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (line.startsWith("```")) {
+      const code: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i]!.startsWith("```")) code.push(lines[i++]!);
+      i++;
+      blocks.push(<pre key={`b${i}`}><code>{code.join("\n")}</code></pre>);
+      continue;
+    }
+    if (/^\s*([-*•]|\d+[.)])\s+/.test(line)) {
+      const ordered = /^\s*\d+[.)]\s+/.test(line);
+      const items: string[] = [];
+      while (i < lines.length && /^\s*([-*•]|\d+[.)])\s+/.test(lines[i]!)) items.push(lines[i++]!.replace(/^\s*([-*•]|\d+[.)])\s+/, ""));
+      const children = items.map((item, index) => <li key={index}>{inline(item, `l${i}-${index}`)}</li>);
+      blocks.push(ordered ? <ol key={`b${i}`}>{children}</ol> : <ul key={`b${i}`}>{children}</ul>);
+      continue;
+    }
+    if (/^#{1,4}\s+/.test(line)) {
+      blocks.push(<h4 key={`b${i}`}>{inline(line.replace(/^#{1,4}\s+/, ""), `h${i}`)}</h4>);
+      i++;
+      continue;
+    }
+    if (!line.trim()) { i++; continue; }
+    const para: string[] = [];
+    while (i < lines.length && lines[i]!.trim() && !lines[i]!.startsWith("```") && !/^\s*([-*•]|\d+[.)])\s+/.test(lines[i]!) && !/^#{1,4}\s+/.test(lines[i]!)) para.push(lines[i++]!);
+    blocks.push(<p key={`b${i}`}>{para.map((item, index) => <span key={index}>{index ? <br /> : null}{inline(item, `p${i}-${index}`)}</span>)}</p>);
+  }
+  return <div className="md">{blocks}</div>;
 }
 
 const TAGLINES: Partial<Record<string, string>> = {

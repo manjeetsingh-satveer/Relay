@@ -54,6 +54,10 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
       ? await page.locator(assistantSelector).last().evaluate((el, attr) => el.closest(`[${attr}]`)?.getAttribute(attr) ?? null, rowKeyAttr, { timeout: 1000 }).catch(() => null)
       : null;
   const keyBefore = await lastKey();
+  // Long chats are virtualized (old messages unload), so the reply count can stay the same.
+  // A different text in the last reply also means a new reply.
+  const lastReplyText = async () => (await page.locator(assistantSelector).last().innerText({ timeout: 1000 }).catch(() => "")).trim();
+  const textBefore = before > 0 ? await lastReplyText() : "";
   const bodyBefore = await pageText(page);
   const tag = await composer.evaluate((el) => el.tagName.toLowerCase());
   if (tag === "textarea" || tag === "input") {
@@ -81,10 +85,12 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
     const count = await page.locator(assistantSelector).count();
     let current = "";
     const key = site.rowKeyAttr && count > 0 ? await lastKey() : null;
-    if (count > before || (key !== null && key !== keyBefore)) {
-      current = (await page.locator(assistantSelector).last().innerText().catch(() => "")).trim();
+    const lastNow = count > 0 ? await lastReplyText() : "";
+    if (count > before || (key !== null && key !== keyBefore) || (lastNow && lastNow !== textBefore)) {
+      current = lastNow;
       fallbackText = "";
-    } else if (Date.now() - sentAt > 15_000) {
+    } else if (count === 0 && Date.now() - sentAt > 15_000) {
+      // Only when the reply selector matches nothing at all (the site changed): use new page text.
       current = newLines(bodyBefore, await pageText(page), input.prompt);
       fallbackText = current;
     }
