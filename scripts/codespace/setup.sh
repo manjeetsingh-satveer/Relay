@@ -52,7 +52,7 @@ fi
 sudo tee /usr/local/bin/relay-grok-bot >/dev/null <<'EOF'
 #!/bin/sh
 if ! command -v grok-bot >/dev/null 2>&1; then exec /usr/local/bin/relay-install-grok-bot; fi
-exec grok-bot --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port=9224 "$@"
+exec grok-bot --no-sandbox --password-store=basic --remote-debugging-address=127.0.0.1 --remote-debugging-port=9224 "$@"
 EOF
 sudo chmod 755 /usr/local/bin/relay-grok-bot
 entry "$HOME/Desktop/relay-grok-bot.desktop" "Grok Bot" /usr/local/bin/relay-grok-bot grok-bot

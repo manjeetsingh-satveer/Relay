@@ -81,12 +81,13 @@ export const WEB_SITES: SiteDefinition[] = [
     selectors: {
       composer: [fixture, "div.ProseMirror", "fieldset [contenteditable='true']"],
       send: ["[data-relay='send']", "button[aria-label='Send message']", "button[aria-label='Send Message']"],
-      assistant: ["[data-relay='assistant']", "[data-testid='conversation-turn']", "div.font-claude-message"],
+      // [data-perf-reply-text] holds only the answer (not the "thinking" status line). Checked on claude.ai, 24 Nov 2026.
+      assistant: ["[data-relay='assistant']", "[data-is-streaming] [data-perf-reply-text]"],
       code: ["[data-filename]", "pre code"],
       login: ["[data-relay='login']", "a[href*='login']", "button:text-is('Continue with Google')"],
       captcha: ["[data-relay='captcha']", "iframe[src*='captcha']", "iframe[src*='hcaptcha']", "iframe[src*='recaptcha']"],
       rateLimit: ["[data-relay='limit']", "text=/usage limit|rate limit|message limit/i"],
-      streaming: ["[data-relay='streaming']"],
+      streaming: ["[data-relay='streaming']", "[data-is-streaming='true']"],
       stop: ["[data-relay='stop']", "button[aria-label='Stop response']"],
     },
   },
