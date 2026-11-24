@@ -73,6 +73,7 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
   const sentAt = Date.now();
   let lastText = "";
   let stable = 0;
+  let unchangedFor = 0;
   let fallbackText = "";
   const ready = await waitUntil(async () => {
     await blockIfNeeded(page, site);
@@ -89,7 +90,11 @@ export async function driveChat(page: Page, site: SiteDefinition, input: DriveIn
     }
     // A "… is typing" placeholder is never the answer.
     if (/is typing|^Typing…?$/im.test(current)) current = "";
-    if (current && !streaming && current === lastText) stable += 1;
+    // Desktop apps can leave a "typing" marker up after the reply is done: accept a reply that
+    // hasn't changed for 60 seconds even if the marker is still showing.
+    if (current && current === lastText) unchangedFor += 1;
+    else unchangedFor = 0;
+    if (current && (!streaming || (site.desktopApp && unchangedFor >= 60)) && current === lastText) stable += 1;
     else stable = 0;
     lastText = current;
     return stable >= 2;
