@@ -22,7 +22,9 @@ Relay runs the real AI apps you already pay for inside **your own private cloud 
 
 </div>
 
-![Relay-GrokBot lists three hosting options and Relay-Claude picks the best one, in one chat](docs/images/chat.png)
+![Demo: typing "@Relay-GrokBot what are 3 cheap ways to host a web app? then @Relay-Claude pick the best one". Grok Bot lists three options, then Claude reads them and picks one](docs/images/relay-demo.gif)
+
+<sub>Real run, not mocked: Grok Bot and Claude answering through their own apps in a Codespace. The waiting is sped up.</sub>
 
 ## Why Relay
 
