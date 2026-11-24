@@ -244,7 +244,16 @@ function Chat(props: {
         {props.thread.messages.map((message) => (
           <article key={message.id} className={`bubble ${message.role}`}>
             {message.role === "assistant" ? <div className="badge">{message.adapterId}</div> : null}
-            <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
+            {(() => {
+              // Bot replies start with "**@Name**": show the name in bold instead of raw asterisks.
+              const header = /^\*\*(@[^*\n]+)\*\*\n+/.exec(message.text);
+              return header ? (
+                <>
+                  <strong style={{ display: "block", marginBottom: 6 }}>{header[1]}</strong>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{message.text.slice(header[0].length)}</div>
+                </>
+              ) : <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>;
+            })()}
           </article>
         ))}
         {props.thread.tasks.map((task) => (
