@@ -117,5 +117,12 @@ async function openPage(browser: Browser, site: SiteDefinition, continuedUrl?: s
   }
   if (page.url() !== target) await page.goto(target, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.bringToFront().catch(() => undefined);
+  // Some sites open in a mode Relay cannot type into (ChatGPT's "Work" mode), so switch to plain chat first.
+  if (site.startClick) {
+    const toggle = page.locator(site.startClick).first();
+    // The page may still be rendering, so wait briefly for the toggle; most pages never show one.
+    const shown = await toggle.waitFor({ state: "visible", timeout: 4000 }).then(() => true, () => false);
+    if (shown) await toggle.click({ timeout: 4000 }).catch(() => undefined);
+  }
   return page;
 }

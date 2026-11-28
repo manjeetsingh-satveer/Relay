@@ -95,6 +95,8 @@ export const WEB_SITES: SiteDefinition[] = [
     id: "chatgpt-web",
     label: "via ChatGPT web app",
     homeUrl: "https://chatgpt.com/",
+    // ChatGPT can open in "Work" mode; Relay uses the normal "Chat" mode.
+    startClick: ":is(button, [role='radio'], [role='tab']):text-is('Chat')",
     termsUrl: "https://openai.com/policies/terms-of-use",
     termsNote: "OpenAI's terms cover chatgpt.com separately from the API. Automating the website can violate those terms.",
     selectors: {
