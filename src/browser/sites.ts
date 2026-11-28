@@ -98,8 +98,8 @@ export const WEB_SITES: SiteDefinition[] = [
     termsUrl: "https://openai.com/policies/terms-of-use",
     termsNote: "OpenAI's terms cover chatgpt.com separately from the API. Automating the website can violate those terms.",
     selectors: {
-      composer: [fixture, "#prompt-textarea", "textarea[aria-label='Chat with ChatGPT']", "textarea[placeholder='Ask ChatGPT']", "textarea[data-id='root']"],
-      send: ["[data-relay='send']", "button[data-testid='send-button']"],
+      composer: [fixture, "#prompt-textarea", "[contenteditable='true'][aria-label='Work with ChatGPT']", "main form [contenteditable='true']", "textarea[aria-label='Chat with ChatGPT']", "textarea[placeholder='Ask ChatGPT']", "textarea[data-id='root']"],
+      send: ["[data-relay='send']", "button[data-testid='send-button']", "button[aria-label='Send prompt']", "button[aria-label='Send']"],
       assistant: ["[data-relay='assistant']", "[data-message-author-role='assistant']"],
       code: ["[data-filename]", "pre code"],
       login: ["[data-relay='login']", "button:text-is('Log in')", "a[href*='/auth/login']"],
