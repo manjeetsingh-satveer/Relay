@@ -160,7 +160,8 @@ async function filesFrom(last: Locator, site: SiteDefinition, text: string): Pro
 
 async function firstVisible(page: Page, selectors: string[]): Promise<Locator | null> {
   for (const selector of selectors) {
-    const locator = page.locator(selector).first();
+    // Pages can keep hidden copies (ChatGPT keeps a hidden home composer), so pick the first visible match.
+    const locator = page.locator(`${selector} >> visible=true`).first();
     if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) return locator;
   }
   return null;
